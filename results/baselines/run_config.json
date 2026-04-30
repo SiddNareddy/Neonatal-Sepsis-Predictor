@@ -1,0 +1,72 @@
+{
+  "data": "neonatal_sepsis_data_v1.npz",
+  "out_dir": "results/baselines",
+  "horizons": [
+    6,
+    12,
+    18,
+    24
+  ],
+  "channel_sets": [
+    "values",
+    "values_masks",
+    "full"
+  ],
+  "models": [
+    "Dummy_StratifiedFloor",
+    "LogReg_L2_balanced",
+    "RandomForest_balanced",
+    "ExtraTrees_balanced",
+    "HistGradBoost",
+    "MLP_tabular"
+  ],
+  "seed": 42,
+  "quick": false,
+  "dataset_summary": {
+    "channel_names": [
+      "heart_rate",
+      "temperature",
+      "respiratory_rate",
+      "fio2",
+      "sa02",
+      "heart_rate_observed_mask",
+      "temperature_observed_mask",
+      "respiratory_rate_observed_mask",
+      "fio2_observed_mask",
+      "sa02_observed_mask",
+      "source_temp_c",
+      "source_temp_axillary_f",
+      "source_temp_rectal_f",
+      "source_fio2",
+      "source_fio2_imputed",
+      "source_heart_rate",
+      "source_respiratory_rate",
+      "source_sa02"
+    ],
+    "label_names": [
+      "control",
+      "sepsis"
+    ],
+    "splits": {
+      "train": 2205,
+      "val": 276,
+      "test": 276
+    },
+    "label_balance": {
+      "train": [
+        846,
+        1359
+      ],
+      "val": [
+        106,
+        170
+      ],
+      "test": [
+        106,
+        170
+      ]
+    },
+    "horizon_max": 24,
+    "n_channels": 18
+  }
+}

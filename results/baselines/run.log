@@ -1,0 +1,500 @@
+04:04:25 | INFO    | Loading dataset from neonatal_sepsis_data_v1.npz
+04:04:25 | INFO    | Dataset summary: {
+  "channel_names": [
+    "heart_rate",
+    "temperature",
+    "respiratory_rate",
+    "fio2",
+    "sa02",
+    "heart_rate_observed_mask",
+    "temperature_observed_mask",
+    "respiratory_rate_observed_mask",
+    "fio2_observed_mask",
+    "sa02_observed_mask",
+    "source_temp_c",
+    "source_temp_axillary_f",
+    "source_temp_rectal_f",
+    "source_fio2",
+    "source_fio2_imputed",
+    "source_heart_rate",
+    "source_respiratory_rate",
+    "source_sa02"
+  ],
+  "label_names": [
+    "control",
+    "sepsis"
+  ],
+  "splits": {
+    "train": 2205,
+    "val": 276,
+    "test": 276
+  },
+  "label_balance": {
+    "train": [
+      846,
+      1359
+    ],
+    "val": [
+      106,
+      170
+    ],
+    "test": [
+      106,
+      170
+    ]
+  },
+  "horizon_max": 24,
+  "n_channels": 18
+}
+04:04:25 | INFO    | ==============================================================================
+04:04:25 | INFO    | Plan: 72 experiments = 4 horizon(s) x 3 channel set(s) x 6 model(s)
+04:04:25 | INFO    | Horizons      : [6, 12, 18, 24]
+04:04:25 | INFO    | Channel sets  : ['values', 'values_masks', 'full']
+04:04:25 | INFO    | Models        : ['Dummy_StratifiedFloor', 'LogReg_L2_balanced', 'RandomForest_balanced', 'ExtraTrees_balanced', 'HistGradBoost', 'MLP_tabular']
+04:04:25 | INFO    | ==============================================================================
+04:04:25 | INFO    | [1/72] horizon=6h | channels=values | model=Dummy_StratifiedFloor | elapsed=00:00 | eta=??:??
+04:04:25 | INFO    |   features: train=(2205, 70) val=(276, 70) test=(276, 70) | dim=70 | feat_time=0.01s
+04:04:25 | INFO    |   timings  | feat=0.01s fit=0.01s predict=0.00s total=0.06s
+04:04:25 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:25 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:25 | INFO    |   progress | done=1/72 | elapsed=00:00 | avg/exp=0.1s | eta=00:06
+04:04:25 | INFO    | [2/72] horizon=6h | channels=values | model=LogReg_L2_balanced | elapsed=00:00 | eta=00:06
+04:04:25 | INFO    |   features: train=(2205, 70) val=(276, 70) test=(276, 70) | dim=70 | feat_time=0.01s
+04:04:25 | INFO    |   timings  | feat=0.01s fit=0.06s predict=0.00s total=0.10s
+04:04:25 | INFO    |   test     | AUROC=0.6671 AUPRC=0.7773 F1=0.7458 sens=0.9059 spec=0.1604 bal_acc=0.5331 thr=0.297
+04:04:25 | INFO    |   val      | AUROC=0.6317 AUPRC=0.7106 F1=0.7651 sens=0.9294 spec=0.1981
+04:04:25 | INFO    |   progress | done=2/72 | elapsed=00:00 | avg/exp=0.1s | eta=00:07
+04:04:25 | INFO    | [3/72] horizon=6h | channels=values | model=RandomForest_balanced | elapsed=00:00 | eta=00:07
+04:04:25 | INFO    |   features: train=(2205, 70) val=(276, 70) test=(276, 70) | dim=70 | feat_time=0.01s
+04:04:27 | INFO    |   timings  | feat=0.01s fit=1.36s predict=0.17s total=1.57s
+04:04:27 | INFO    |   test     | AUROC=0.6968 AUPRC=0.8029 F1=0.7458 sens=0.9235 spec=0.1132 bal_acc=0.5184 thr=0.375
+04:04:27 | INFO    |   val      | AUROC=0.7229 AUPRC=0.8220 F1=0.7696 sens=0.9529 spec=0.1604
+04:04:27 | INFO    |   progress | done=3/72 | elapsed=00:01 | avg/exp=0.6s | eta=00:41
+04:04:27 | INFO    | [4/72] horizon=6h | channels=values | model=ExtraTrees_balanced | elapsed=00:01 | eta=00:41
+04:04:27 | INFO    |   features: train=(2205, 70) val=(276, 70) test=(276, 70) | dim=70 | feat_time=0.01s
+04:04:28 | INFO    |   timings  | feat=0.01s fit=0.70s predict=0.15s total=0.90s
+04:04:28 | INFO    |   test     | AUROC=0.7161 AUPRC=0.7997 F1=0.7545 sens=0.9765 spec=0.0189 bal_acc=0.4977 thr=0.297
+04:04:28 | INFO    |   val      | AUROC=0.7179 AUPRC=0.8206 F1=0.7675 sens=1.0000 spec=0.0283
+04:04:28 | INFO    |   progress | done=4/72 | elapsed=00:02 | avg/exp=0.7s | eta=00:45
+04:04:28 | INFO    | [5/72] horizon=6h | channels=values | model=HistGradBoost | elapsed=00:02 | eta=00:45
+04:04:28 | INFO    |   features: train=(2205, 70) val=(276, 70) test=(276, 70) | dim=70 | feat_time=0.01s
+04:04:28 | INFO    |   timings  | feat=0.01s fit=0.18s predict=0.00s total=0.21s
+04:04:28 | INFO    |   test     | AUROC=0.7019 AUPRC=0.7901 F1=0.7554 sens=0.9176 spec=0.1792 bal_acc=0.5484 thr=0.310
+04:04:28 | INFO    |   val      | AUROC=0.7047 AUPRC=0.8037 F1=0.7685 sens=0.9176 spec=0.2453
+04:04:28 | INFO    |   progress | done=5/72 | elapsed=00:02 | avg/exp=0.6s | eta=00:39
+04:04:28 | INFO    | [6/72] horizon=6h | channels=values | model=MLP_tabular | elapsed=00:02 | eta=00:39
+04:04:28 | INFO    |   features: train=(2205, 70) val=(276, 70) test=(276, 70) | dim=70 | feat_time=0.01s
+04:04:28 | INFO    |   timings  | feat=0.01s fit=0.28s predict=0.00s total=0.30s
+04:04:28 | INFO    |   test     | AUROC=0.6931 AUPRC=0.7927 F1=0.7546 sens=0.9588 spec=0.0660 bal_acc=0.5124 thr=0.376
+04:04:28 | INFO    |   val      | AUROC=0.6475 AUPRC=0.7323 F1=0.7648 sens=0.9471 spec=0.1509
+04:04:28 | INFO    |   progress | done=6/72 | elapsed=00:03 | avg/exp=0.5s | eta=00:35
+04:04:28 | INFO    | [7/72] horizon=6h | channels=values_masks | model=Dummy_StratifiedFloor | elapsed=00:03 | eta=00:35
+04:04:28 | INFO    |   features: train=(2205, 140) val=(276, 140) test=(276, 140) | dim=140 | feat_time=0.01s
+04:04:28 | INFO    |   timings  | feat=0.01s fit=0.00s predict=0.00s total=0.03s
+04:04:28 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:28 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:28 | INFO    |   progress | done=7/72 | elapsed=00:03 | avg/exp=0.5s | eta=00:30
+04:04:28 | INFO    | [8/72] horizon=6h | channels=values_masks | model=LogReg_L2_balanced | elapsed=00:03 | eta=00:30
+04:04:28 | INFO    |   features: train=(2205, 140) val=(276, 140) test=(276, 140) | dim=140 | feat_time=0.01s
+04:04:28 | INFO    |   timings  | feat=0.01s fit=0.05s predict=0.00s total=0.07s
+04:04:28 | INFO    |   test     | AUROC=0.6790 AUPRC=0.7752 F1=0.7699 sens=0.9941 spec=0.0566 bal_acc=0.5254 thr=0.161
+04:04:28 | INFO    |   val      | AUROC=0.6384 AUPRC=0.7139 F1=0.7664 sens=0.9941 spec=0.0377
+04:04:28 | INFO    |   progress | done=8/72 | elapsed=00:03 | avg/exp=0.4s | eta=00:26
+04:04:28 | INFO    | [9/72] horizon=6h | channels=values_masks | model=RandomForest_balanced | elapsed=00:03 | eta=00:26
+04:04:28 | INFO    |   features: train=(2205, 140) val=(276, 140) test=(276, 140) | dim=140 | feat_time=0.01s
+04:04:30 | INFO    |   timings  | feat=0.01s fit=1.18s predict=0.16s total=1.39s
+04:04:30 | INFO    |   test     | AUROC=0.7127 AUPRC=0.8097 F1=0.7506 sens=0.9471 spec=0.0755 bal_acc=0.5113 thr=0.328
+04:04:30 | INFO    |   val      | AUROC=0.7221 AUPRC=0.8193 F1=0.7706 sens=0.9882 spec=0.0755
+04:04:30 | INFO    |   progress | done=9/72 | elapsed=00:04 | avg/exp=0.5s | eta=00:33
+04:04:30 | INFO    | [10/72] horizon=6h | channels=values_masks | model=ExtraTrees_balanced | elapsed=00:04 | eta=00:33
+04:04:30 | INFO    |   features: train=(2205, 140) val=(276, 140) test=(276, 140) | dim=140 | feat_time=0.01s
+04:04:31 | INFO    |   timings  | feat=0.01s fit=0.69s predict=0.15s total=0.89s
+04:04:31 | INFO    |   test     | AUROC=0.7254 AUPRC=0.8139 F1=0.7783 sens=0.9706 spec=0.1604 bal_acc=0.5655 thr=0.338
+04:04:31 | INFO    |   val      | AUROC=0.6784 AUPRC=0.7848 F1=0.7731 sens=0.9824 spec=0.1038
+04:04:31 | INFO    |   progress | done=10/72 | elapsed=00:05 | avg/exp=0.6s | eta=00:35
+04:04:31 | INFO    | [11/72] horizon=6h | channels=values_masks | model=HistGradBoost | elapsed=00:05 | eta=00:35
+04:04:31 | INFO    |   features: train=(2205, 140) val=(276, 140) test=(276, 140) | dim=140 | feat_time=0.01s
+04:04:31 | INFO    |   timings  | feat=0.01s fit=0.25s predict=0.00s total=0.28s
+04:04:31 | INFO    |   test     | AUROC=0.7166 AUPRC=0.8017 F1=0.7734 sens=0.9235 spec=0.2547 bal_acc=0.5891 thr=0.300
+04:04:31 | INFO    |   val      | AUROC=0.7170 AUPRC=0.7980 F1=0.7786 sens=0.9412 spec=0.2358
+04:04:31 | INFO    |   progress | done=11/72 | elapsed=00:05 | avg/exp=0.5s | eta=00:33
+04:04:31 | INFO    | [12/72] horizon=6h | channels=values_masks | model=MLP_tabular | elapsed=00:05 | eta=00:33
+04:04:31 | INFO    |   features: train=(2205, 140) val=(276, 140) test=(276, 140) | dim=140 | feat_time=0.01s
+04:04:31 | INFO    |   timings  | feat=0.01s fit=0.43s predict=0.00s total=0.46s
+04:04:31 | INFO    |   test     | AUROC=0.7156 AUPRC=0.7981 F1=0.7646 sens=0.9647 spec=0.1038 bal_acc=0.5342 thr=0.280
+04:04:31 | INFO    |   val      | AUROC=0.6516 AUPRC=0.7385 F1=0.7703 sens=0.9765 spec=0.1038
+04:04:31 | INFO    |   progress | done=12/72 | elapsed=00:06 | avg/exp=0.5s | eta=00:32
+04:04:31 | INFO    | [13/72] horizon=6h | channels=full | model=Dummy_StratifiedFloor | elapsed=00:06 | eta=00:32
+04:04:31 | INFO    |   features: train=(2205, 252) val=(276, 252) test=(276, 252) | dim=252 | feat_time=0.01s
+04:04:31 | INFO    |   timings  | feat=0.01s fit=0.00s predict=0.00s total=0.03s
+04:04:31 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:31 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:31 | INFO    |   progress | done=13/72 | elapsed=00:06 | avg/exp=0.5s | eta=00:29
+04:04:31 | INFO    | [14/72] horizon=6h | channels=full | model=LogReg_L2_balanced | elapsed=00:06 | eta=00:29
+04:04:31 | INFO    |   features: train=(2205, 252) val=(276, 252) test=(276, 252) | dim=252 | feat_time=0.01s
+04:04:32 | INFO    |   timings  | feat=0.01s fit=0.07s predict=0.00s total=0.09s
+04:04:32 | INFO    |   test     | AUROC=0.7378 AUPRC=0.8160 F1=0.7861 sens=0.9294 spec=0.3019 bal_acc=0.6156 thr=0.242
+04:04:32 | INFO    |   val      | AUROC=0.6967 AUPRC=0.7619 F1=0.7841 sens=0.9294 spec=0.2925
+04:04:32 | INFO    |   progress | done=14/72 | elapsed=00:06 | avg/exp=0.5s | eta=00:27
+04:04:32 | INFO    | [15/72] horizon=6h | channels=full | model=RandomForest_balanced | elapsed=00:06 | eta=00:27
+04:04:32 | INFO    |   features: train=(2205, 252) val=(276, 252) test=(276, 252) | dim=252 | feat_time=0.01s
+04:04:33 | INFO    |   timings  | feat=0.01s fit=1.12s predict=0.17s total=1.34s
+04:04:33 | INFO    |   test     | AUROC=0.7416 AUPRC=0.8244 F1=0.7680 sens=0.8765 spec=0.3491 bal_acc=0.6128 thr=0.398
+04:04:33 | INFO    |   val      | AUROC=0.7460 AUPRC=0.8329 F1=0.7830 sens=0.9235 spec=0.3019
+04:04:33 | INFO    |   progress | done=15/72 | elapsed=00:07 | avg/exp=0.5s | eta=00:30
+04:04:33 | INFO    | [16/72] horizon=6h | channels=full | model=ExtraTrees_balanced | elapsed=00:07 | eta=00:30
+04:04:33 | INFO    |   features: train=(2205, 252) val=(276, 252) test=(276, 252) | dim=252 | feat_time=0.02s
+04:04:34 | INFO    |   timings  | feat=0.02s fit=0.80s predict=0.15s total=1.00s
+04:04:34 | INFO    |   test     | AUROC=0.7216 AUPRC=0.8136 F1=0.7678 sens=0.9529 spec=0.1509 bal_acc=0.5519 thr=0.300
+04:04:34 | INFO    |   val      | AUROC=0.7259 AUPRC=0.8037 F1=0.7850 sens=0.9882 spec=0.1509
+04:04:34 | INFO    |   progress | done=16/72 | elapsed=00:08 | avg/exp=0.6s | eta=00:31
+04:04:34 | INFO    | [17/72] horizon=6h | channels=full | model=HistGradBoost | elapsed=00:08 | eta=00:31
+04:04:34 | INFO    |   features: train=(2205, 252) val=(276, 252) test=(276, 252) | dim=252 | feat_time=0.01s
+04:04:34 | INFO    |   timings  | feat=0.01s fit=0.28s predict=0.00s total=0.31s
+04:04:34 | INFO    |   test     | AUROC=0.7308 AUPRC=0.8208 F1=0.7673 sens=0.8824 spec=0.3302 bal_acc=0.6063 thr=0.297
+04:04:34 | INFO    |   val      | AUROC=0.7255 AUPRC=0.8051 F1=0.7802 sens=0.9294 spec=0.2736
+04:04:34 | INFO    |   progress | done=17/72 | elapsed=00:09 | avg/exp=0.5s | eta=00:30
+04:04:34 | INFO    | [18/72] horizon=6h | channels=full | model=MLP_tabular | elapsed=00:09 | eta=00:30
+04:04:34 | INFO    |   features: train=(2205, 252) val=(276, 252) test=(276, 252) | dim=252 | feat_time=0.01s
+04:04:35 | INFO    |   timings  | feat=0.01s fit=0.36s predict=0.00s total=0.39s
+04:04:35 | INFO    |   test     | AUROC=0.7224 AUPRC=0.8244 F1=0.7677 sens=0.8941 spec=0.3019 bal_acc=0.5980 thr=0.394
+04:04:35 | INFO    |   val      | AUROC=0.7070 AUPRC=0.7630 F1=0.7889 sens=0.9235 spec=0.3302
+04:04:35 | INFO    |   progress | done=18/72 | elapsed=00:09 | avg/exp=0.5s | eta=00:29
+04:04:35 | INFO    | [19/72] horizon=12h | channels=values | model=Dummy_StratifiedFloor | elapsed=00:09 | eta=00:29
+04:04:35 | INFO    |   features: train=(2205, 100) val=(276, 100) test=(276, 100) | dim=100 | feat_time=0.01s
+04:04:35 | INFO    |   timings  | feat=0.01s fit=0.00s predict=0.00s total=0.03s
+04:04:35 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:35 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:35 | INFO    |   progress | done=19/72 | elapsed=00:09 | avg/exp=0.5s | eta=00:27
+04:04:35 | INFO    | [20/72] horizon=12h | channels=values | model=LogReg_L2_balanced | elapsed=00:09 | eta=00:27
+04:04:35 | INFO    |   features: train=(2205, 100) val=(276, 100) test=(276, 100) | dim=100 | feat_time=0.01s
+04:04:35 | INFO    |   timings  | feat=0.01s fit=0.03s predict=0.00s total=0.06s
+04:04:35 | INFO    |   test     | AUROC=0.6733 AUPRC=0.7794 F1=0.7696 sens=0.9824 spec=0.0849 bal_acc=0.5336 thr=0.203
+04:04:35 | INFO    |   val      | AUROC=0.6811 AUPRC=0.7472 F1=0.7760 sens=0.9882 spec=0.1038
+04:04:35 | INFO    |   progress | done=20/72 | elapsed=00:09 | avg/exp=0.5s | eta=00:25
+04:04:35 | INFO    | [21/72] horizon=12h | channels=values | model=RandomForest_balanced | elapsed=00:09 | eta=00:25
+04:04:35 | INFO    |   features: train=(2205, 100) val=(276, 100) test=(276, 100) | dim=100 | feat_time=0.01s
+04:04:36 | INFO    |   timings  | feat=0.01s fit=1.41s predict=0.18s total=1.63s
+04:04:36 | INFO    |   test     | AUROC=0.7208 AUPRC=0.8143 F1=0.7671 sens=0.9588 spec=0.1321 bal_acc=0.5454 thr=0.328
+04:04:36 | INFO    |   val      | AUROC=0.7570 AUPRC=0.8392 F1=0.7869 sens=0.9882 spec=0.1604
+04:04:36 | INFO    |   progress | done=21/72 | elapsed=00:11 | avg/exp=0.5s | eta=00:27
+04:04:36 | INFO    | [22/72] horizon=12h | channels=values | model=ExtraTrees_balanced | elapsed=00:11 | eta=00:27
+04:04:36 | INFO    |   features: train=(2205, 100) val=(276, 100) test=(276, 100) | dim=100 | feat_time=0.01s
+04:04:37 | INFO    |   timings  | feat=0.01s fit=0.70s predict=0.16s total=0.89s
+04:04:37 | INFO    |   test     | AUROC=0.7256 AUPRC=0.8179 F1=0.7793 sens=0.9765 spec=0.1509 bal_acc=0.5637 thr=0.345
+04:04:37 | INFO    |   val      | AUROC=0.7322 AUPRC=0.8228 F1=0.7824 sens=0.9941 spec=0.1226
+04:04:37 | INFO    |   progress | done=22/72 | elapsed=00:12 | avg/exp=0.6s | eta=00:28
+04:04:37 | INFO    | [23/72] horizon=12h | channels=values | model=HistGradBoost | elapsed=00:12 | eta=00:28
+04:04:37 | INFO    |   features: train=(2205, 100) val=(276, 100) test=(276, 100) | dim=100 | feat_time=0.01s
+04:04:38 | INFO    |   timings  | feat=0.01s fit=0.21s predict=0.00s total=0.23s
+04:04:38 | INFO    |   test     | AUROC=0.7082 AUPRC=0.8123 F1=0.7506 sens=0.8588 spec=0.3113 bal_acc=0.5851 thr=0.312
+04:04:38 | INFO    |   val      | AUROC=0.7370 AUPRC=0.8284 F1=0.7769 sens=0.9118 spec=0.3019
+04:04:38 | INFO    |   progress | done=23/72 | elapsed=00:12 | avg/exp=0.5s | eta=00:26
+04:04:38 | INFO    | [24/72] horizon=12h | channels=values | model=MLP_tabular | elapsed=00:12 | eta=00:26
+04:04:38 | INFO    |   features: train=(2205, 100) val=(276, 100) test=(276, 100) | dim=100 | feat_time=0.01s
+04:04:38 | INFO    |   timings  | feat=0.01s fit=0.54s predict=0.00s total=0.57s
+04:04:38 | INFO    |   test     | AUROC=0.7124 AUPRC=0.7965 F1=0.7822 sens=0.8765 spec=0.4151 bal_acc=0.6458 thr=0.300
+04:04:38 | INFO    |   val      | AUROC=0.7113 AUPRC=0.7882 F1=0.7784 sens=0.8882 spec=0.3679
+04:04:38 | INFO    |   progress | done=24/72 | elapsed=00:13 | avg/exp=0.5s | eta=00:26
+04:04:38 | INFO    | [25/72] horizon=12h | channels=values_masks | model=Dummy_StratifiedFloor | elapsed=00:13 | eta=00:26
+04:04:38 | INFO    |   features: train=(2205, 200) val=(276, 200) test=(276, 200) | dim=200 | feat_time=0.01s
+04:04:38 | INFO    |   timings  | feat=0.01s fit=0.00s predict=0.00s total=0.03s
+04:04:38 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:38 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:38 | INFO    |   progress | done=25/72 | elapsed=00:13 | avg/exp=0.5s | eta=00:24
+04:04:38 | INFO    | [26/72] horizon=12h | channels=values_masks | model=LogReg_L2_balanced | elapsed=00:13 | eta=00:24
+04:04:38 | INFO    |   features: train=(2205, 200) val=(276, 200) test=(276, 200) | dim=200 | feat_time=0.01s
+04:04:38 | INFO    |   timings  | feat=0.01s fit=0.07s predict=0.00s total=0.10s
+04:04:38 | INFO    |   test     | AUROC=0.6978 AUPRC=0.7943 F1=0.7681 sens=0.9647 spec=0.1226 bal_acc=0.5437 thr=0.146
+04:04:38 | INFO    |   val      | AUROC=0.6879 AUPRC=0.7546 F1=0.7786 sens=0.9824 spec=0.1321
+04:04:38 | INFO    |   progress | done=26/72 | elapsed=00:13 | avg/exp=0.5s | eta=00:23
+04:04:38 | INFO    | [27/72] horizon=12h | channels=values_masks | model=RandomForest_balanced | elapsed=00:13 | eta=00:23
+04:04:38 | INFO    |   features: train=(2205, 200) val=(276, 200) test=(276, 200) | dim=200 | feat_time=0.01s
+04:04:40 | INFO    |   timings  | feat=0.01s fit=1.26s predict=0.15s total=1.46s
+04:04:40 | INFO    |   test     | AUROC=0.7279 AUPRC=0.8249 F1=0.7610 sens=0.9176 spec=0.2075 bal_acc=0.5626 thr=0.390
+04:04:40 | INFO    |   val      | AUROC=0.7466 AUPRC=0.8311 F1=0.7847 sens=0.9647 spec=0.2075
+04:04:40 | INFO    |   progress | done=27/72 | elapsed=00:14 | avg/exp=0.5s | eta=00:24
+04:04:40 | INFO    | [28/72] horizon=12h | channels=values_masks | model=ExtraTrees_balanced | elapsed=00:14 | eta=00:24
+04:04:40 | INFO    |   features: train=(2205, 200) val=(276, 200) test=(276, 200) | dim=200 | feat_time=0.02s
+04:04:41 | INFO    |   timings  | feat=0.02s fit=0.74s predict=0.21s total=1.01s
+04:04:41 | INFO    |   test     | AUROC=0.7478 AUPRC=0.8351 F1=0.7680 sens=0.8765 spec=0.3491 bal_acc=0.6128 thr=0.482
+04:04:41 | INFO    |   val      | AUROC=0.7359 AUPRC=0.8224 F1=0.7837 sens=0.9059 spec=0.3491
+04:04:41 | INFO    |   progress | done=28/72 | elapsed=00:15 | avg/exp=0.6s | eta=00:24
+04:04:41 | INFO    | [29/72] horizon=12h | channels=values_masks | model=HistGradBoost | elapsed=00:15 | eta=00:24
+04:04:41 | INFO    |   features: train=(2205, 200) val=(276, 200) test=(276, 200) | dim=200 | feat_time=0.02s
+04:04:41 | INFO    |   timings  | feat=0.02s fit=0.31s predict=0.00s total=0.35s
+04:04:41 | INFO    |   test     | AUROC=0.7223 AUPRC=0.8228 F1=0.7767 sens=0.9824 spec=0.1226 bal_acc=0.5525 thr=0.214
+04:04:41 | INFO    |   val      | AUROC=0.7355 AUPRC=0.8234 F1=0.7830 sens=0.9765 spec=0.1698
+04:04:41 | INFO    |   progress | done=29/72 | elapsed=00:16 | avg/exp=0.6s | eta=00:23
+04:04:41 | INFO    | [30/72] horizon=12h | channels=values_masks | model=MLP_tabular | elapsed=00:16 | eta=00:23
+04:04:41 | INFO    |   features: train=(2205, 200) val=(276, 200) test=(276, 200) | dim=200 | feat_time=0.01s
+04:04:42 | INFO    |   timings  | feat=0.01s fit=0.44s predict=0.00s total=0.47s
+04:04:42 | INFO    |   test     | AUROC=0.7196 AUPRC=0.8141 F1=0.7685 sens=0.9765 spec=0.0943 bal_acc=0.5354 thr=0.125
+04:04:42 | INFO    |   val      | AUROC=0.6577 AUPRC=0.7302 F1=0.7706 sens=0.9882 spec=0.0755
+04:04:42 | INFO    |   progress | done=30/72 | elapsed=00:16 | avg/exp=0.6s | eta=00:23
+04:04:42 | INFO    | [31/72] horizon=12h | channels=full | model=Dummy_StratifiedFloor | elapsed=00:16 | eta=00:23
+04:04:42 | INFO    |   features: train=(2205, 360) val=(276, 360) test=(276, 360) | dim=360 | feat_time=0.01s
+04:04:42 | INFO    |   timings  | feat=0.01s fit=0.00s predict=0.00s total=0.03s
+04:04:42 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:42 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:42 | INFO    |   progress | done=31/72 | elapsed=00:16 | avg/exp=0.5s | eta=00:22
+04:04:42 | INFO    | [32/72] horizon=12h | channels=full | model=LogReg_L2_balanced | elapsed=00:16 | eta=00:22
+04:04:42 | INFO    |   features: train=(2205, 360) val=(276, 360) test=(276, 360) | dim=360 | feat_time=0.01s
+04:04:42 | INFO    |   timings  | feat=0.01s fit=0.09s predict=0.00s total=0.12s
+04:04:42 | INFO    |   test     | AUROC=0.7324 AUPRC=0.8109 F1=0.7758 sens=0.9059 spec=0.3113 bal_acc=0.6086 thr=0.208
+04:04:42 | INFO    |   val      | AUROC=0.7064 AUPRC=0.7769 F1=0.7901 sens=0.9412 spec=0.2925
+04:04:42 | INFO    |   progress | done=32/72 | elapsed=00:16 | avg/exp=0.5s | eta=00:21
+04:04:42 | INFO    | [33/72] horizon=12h | channels=full | model=RandomForest_balanced | elapsed=00:16 | eta=00:21
+04:04:42 | INFO    |   features: train=(2205, 360) val=(276, 360) test=(276, 360) | dim=360 | feat_time=0.01s
+04:04:43 | INFO    |   timings  | feat=0.01s fit=1.24s predict=0.16s total=1.46s
+04:04:43 | INFO    |   test     | AUROC=0.7575 AUPRC=0.8355 F1=0.7729 sens=0.9412 spec=0.2075 bal_acc=0.5744 thr=0.333
+04:04:43 | INFO    |   val      | AUROC=0.7550 AUPRC=0.8305 F1=0.7915 sens=0.9824 spec=0.1981
+04:04:43 | INFO    |   progress | done=33/72 | elapsed=00:18 | avg/exp=0.6s | eta=00:21
+04:04:43 | INFO    | [34/72] horizon=12h | channels=full | model=ExtraTrees_balanced | elapsed=00:18 | eta=00:21
+04:04:43 | INFO    |   features: train=(2205, 360) val=(276, 360) test=(276, 360) | dim=360 | feat_time=0.03s
+04:04:44 | INFO    |   timings  | feat=0.03s fit=0.81s predict=0.15s total=1.03s
+04:04:44 | INFO    |   test     | AUROC=0.7517 AUPRC=0.8284 F1=0.7668 sens=0.8706 spec=0.3585 bal_acc=0.6145 thr=0.415
+04:04:44 | INFO    |   val      | AUROC=0.7447 AUPRC=0.8176 F1=0.7889 sens=0.9235 spec=0.3302
+04:04:44 | INFO    |   progress | done=34/72 | elapsed=00:19 | avg/exp=0.6s | eta=00:21
+04:04:44 | INFO    | [35/72] horizon=12h | channels=full | model=HistGradBoost | elapsed=00:19 | eta=00:21
+04:04:44 | INFO    |   features: train=(2205, 360) val=(276, 360) test=(276, 360) | dim=360 | feat_time=0.02s
+04:04:45 | INFO    |   timings  | feat=0.02s fit=0.55s predict=0.00s total=0.59s
+04:04:45 | INFO    |   test     | AUROC=0.7671 AUPRC=0.8537 F1=0.7818 sens=0.9588 spec=0.2075 bal_acc=0.5832 thr=0.209
+04:04:45 | INFO    |   val      | AUROC=0.7653 AUPRC=0.8299 F1=0.7867 sens=0.9765 spec=0.1887
+04:04:45 | INFO    |   progress | done=35/72 | elapsed=00:19 | avg/exp=0.6s | eta=00:21
+04:04:45 | INFO    | [36/72] horizon=12h | channels=full | model=MLP_tabular | elapsed=00:19 | eta=00:21
+04:04:45 | INFO    |   features: train=(2205, 360) val=(276, 360) test=(276, 360) | dim=360 | feat_time=0.01s
+04:04:45 | INFO    |   timings  | feat=0.01s fit=0.48s predict=0.00s total=0.51s
+04:04:45 | INFO    |   test     | AUROC=0.7690 AUPRC=0.8467 F1=0.7949 sens=0.9235 spec=0.3585 bal_acc=0.6410 thr=0.349
+04:04:45 | INFO    |   val      | AUROC=0.7211 AUPRC=0.7978 F1=0.7899 sens=0.9176 spec=0.3491
+04:04:45 | INFO    |   progress | done=36/72 | elapsed=00:20 | avg/exp=0.6s | eta=00:20
+04:04:45 | INFO    | [37/72] horizon=18h | channels=values | model=Dummy_StratifiedFloor | elapsed=00:20 | eta=00:20
+04:04:46 | INFO    |   features: train=(2205, 130) val=(276, 130) test=(276, 130) | dim=130 | feat_time=0.01s
+04:04:46 | INFO    |   timings  | feat=0.01s fit=0.00s predict=0.00s total=0.03s
+04:04:46 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:46 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:46 | INFO    |   progress | done=37/72 | elapsed=00:20 | avg/exp=0.6s | eta=00:19
+04:04:46 | INFO    | [38/72] horizon=18h | channels=values | model=LogReg_L2_balanced | elapsed=00:20 | eta=00:19
+04:04:46 | INFO    |   features: train=(2205, 130) val=(276, 130) test=(276, 130) | dim=130 | feat_time=0.01s
+04:04:46 | INFO    |   timings  | feat=0.01s fit=0.04s predict=0.00s total=0.07s
+04:04:46 | INFO    |   test     | AUROC=0.6971 AUPRC=0.7908 F1=0.7692 sens=0.9706 spec=0.1132 bal_acc=0.5419 thr=0.211
+04:04:46 | INFO    |   val      | AUROC=0.6804 AUPRC=0.7634 F1=0.7775 sens=0.9765 spec=0.1415
+04:04:46 | INFO    |   progress | done=38/72 | elapsed=00:20 | avg/exp=0.5s | eta=00:18
+04:04:46 | INFO    | [39/72] horizon=18h | channels=values | model=RandomForest_balanced | elapsed=00:20 | eta=00:18
+04:04:46 | INFO    |   features: train=(2205, 130) val=(276, 130) test=(276, 130) | dim=130 | feat_time=0.01s
+04:04:47 | INFO    |   timings  | feat=0.01s fit=1.47s predict=0.16s total=1.69s
+04:04:47 | INFO    |   test     | AUROC=0.7197 AUPRC=0.8240 F1=0.7506 sens=0.8765 spec=0.2642 bal_acc=0.5703 thr=0.430
+04:04:47 | INFO    |   val      | AUROC=0.7626 AUPRC=0.8373 F1=0.8020 sens=0.9647 spec=0.2925
+04:04:47 | INFO    |   progress | done=39/72 | elapsed=00:22 | avg/exp=0.6s | eta=00:18
+04:04:47 | INFO    | [40/72] horizon=18h | channels=values | model=ExtraTrees_balanced | elapsed=00:22 | eta=00:18
+04:04:47 | INFO    |   features: train=(2205, 130) val=(276, 130) test=(276, 130) | dim=130 | feat_time=0.02s
+04:04:48 | INFO    |   timings  | feat=0.02s fit=0.73s predict=0.17s total=0.96s
+04:04:48 | INFO    |   test     | AUROC=0.7135 AUPRC=0.8155 F1=0.7731 sens=0.9118 spec=0.2830 bal_acc=0.5974 thr=0.432
+04:04:48 | INFO    |   val      | AUROC=0.7563 AUPRC=0.8415 F1=0.8000 sens=0.9765 spec=0.2547
+04:04:48 | INFO    |   progress | done=40/72 | elapsed=00:23 | avg/exp=0.6s | eta=00:18
+04:04:48 | INFO    | [41/72] horizon=18h | channels=values | model=HistGradBoost | elapsed=00:23 | eta=00:18
+04:04:48 | INFO    |   features: train=(2205, 130) val=(276, 130) test=(276, 130) | dim=130 | feat_time=0.03s
+04:04:49 | INFO    |   timings  | feat=0.03s fit=0.24s predict=0.00s total=0.29s
+04:04:49 | INFO    |   test     | AUROC=0.7143 AUPRC=0.8249 F1=0.7812 sens=0.9765 spec=0.1604 bal_acc=0.5684 thr=0.213
+04:04:49 | INFO    |   val      | AUROC=0.7583 AUPRC=0.8272 F1=0.7972 sens=0.9941 spec=0.1981
+04:04:49 | INFO    |   progress | done=41/72 | elapsed=00:23 | avg/exp=0.6s | eta=00:17
+04:04:49 | INFO    | [42/72] horizon=18h | channels=values | model=MLP_tabular | elapsed=00:23 | eta=00:17
+04:04:49 | INFO    |   features: train=(2205, 130) val=(276, 130) test=(276, 130) | dim=130 | feat_time=0.01s
+04:04:49 | INFO    |   timings  | feat=0.01s fit=0.30s predict=0.00s total=0.33s
+04:04:49 | INFO    |   test     | AUROC=0.6993 AUPRC=0.8144 F1=0.7561 sens=0.9118 spec=0.1981 bal_acc=0.5549 thr=0.328
+04:04:49 | INFO    |   val      | AUROC=0.6872 AUPRC=0.7604 F1=0.7905 sens=0.9765 spec=0.2075
+04:04:49 | INFO    |   progress | done=42/72 | elapsed=00:23 | avg/exp=0.6s | eta=00:17
+04:04:49 | INFO    | [43/72] horizon=18h | channels=values_masks | model=Dummy_StratifiedFloor | elapsed=00:23 | eta=00:17
+04:04:49 | INFO    |   features: train=(2205, 260) val=(276, 260) test=(276, 260) | dim=260 | feat_time=0.01s
+04:04:49 | INFO    |   timings  | feat=0.01s fit=0.00s predict=0.00s total=0.03s
+04:04:49 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:49 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:49 | INFO    |   progress | done=43/72 | elapsed=00:24 | avg/exp=0.6s | eta=00:16
+04:04:49 | INFO    | [44/72] horizon=18h | channels=values_masks | model=LogReg_L2_balanced | elapsed=00:24 | eta=00:16
+04:04:49 | INFO    |   features: train=(2205, 260) val=(276, 260) test=(276, 260) | dim=260 | feat_time=0.01s
+04:04:49 | INFO    |   timings  | feat=0.01s fit=0.06s predict=0.00s total=0.09s
+04:04:49 | INFO    |   test     | AUROC=0.7046 AUPRC=0.7810 F1=0.7596 sens=0.9294 spec=0.1698 bal_acc=0.5496 thr=0.207
+04:04:49 | INFO    |   val      | AUROC=0.6895 AUPRC=0.7626 F1=0.7864 sens=0.9529 spec=0.2453
+04:04:49 | INFO    |   progress | done=44/72 | elapsed=00:24 | avg/exp=0.5s | eta=00:15
+04:04:49 | INFO    | [45/72] horizon=18h | channels=values_masks | model=RandomForest_balanced | elapsed=00:24 | eta=00:15
+04:04:49 | INFO    |   features: train=(2205, 260) val=(276, 260) test=(276, 260) | dim=260 | feat_time=0.01s
+04:04:51 | INFO    |   timings  | feat=0.01s fit=1.32s predict=0.18s total=1.53s
+04:04:51 | INFO    |   test     | AUROC=0.7242 AUPRC=0.8254 F1=0.7711 sens=0.9118 spec=0.2736 bal_acc=0.5927 thr=0.425
+04:04:51 | INFO    |   val      | AUROC=0.7687 AUPRC=0.8419 F1=0.8029 sens=0.9706 spec=0.2830
+04:04:51 | INFO    |   progress | done=45/72 | elapsed=00:25 | avg/exp=0.6s | eta=00:15
+04:04:51 | INFO    | [46/72] horizon=18h | channels=values_masks | model=ExtraTrees_balanced | elapsed=00:25 | eta=00:15
+04:04:51 | INFO    |   features: train=(2205, 260) val=(276, 260) test=(276, 260) | dim=260 | feat_time=0.02s
+04:04:52 | INFO    |   timings  | feat=0.02s fit=0.77s predict=0.19s total=1.00s
+04:04:52 | INFO    |   test     | AUROC=0.7383 AUPRC=0.8354 F1=0.7854 sens=0.9471 spec=0.2547 bal_acc=0.6009 thr=0.357
+04:04:52 | INFO    |   val      | AUROC=0.7532 AUPRC=0.8379 F1=0.8019 sens=0.9765 spec=0.2642
+04:04:52 | INFO    |   progress | done=46/72 | elapsed=00:26 | avg/exp=0.6s | eta=00:15
+04:04:52 | INFO    | [47/72] horizon=18h | channels=values_masks | model=HistGradBoost | elapsed=00:26 | eta=00:15
+04:04:52 | INFO    |   features: train=(2205, 260) val=(276, 260) test=(276, 260) | dim=260 | feat_time=0.03s
+04:04:52 | INFO    |   timings  | feat=0.03s fit=0.35s predict=0.00s total=0.39s
+04:04:52 | INFO    |   test     | AUROC=0.7137 AUPRC=0.8108 F1=0.7915 sens=0.9824 spec=0.1981 bal_acc=0.5902 thr=0.219
+04:04:52 | INFO    |   val      | AUROC=0.7757 AUPRC=0.8418 F1=0.7990 sens=0.9824 spec=0.2358
+04:04:52 | INFO    |   progress | done=47/72 | elapsed=00:27 | avg/exp=0.6s | eta=00:14
+04:04:52 | INFO    | [48/72] horizon=18h | channels=values_masks | model=MLP_tabular | elapsed=00:27 | eta=00:14
+04:04:52 | INFO    |   features: train=(2205, 260) val=(276, 260) test=(276, 260) | dim=260 | feat_time=0.01s
+04:04:53 | INFO    |   timings  | feat=0.01s fit=0.37s predict=0.00s total=0.40s
+04:04:53 | INFO    |   test     | AUROC=0.6769 AUPRC=0.7776 F1=0.7249 sens=0.8059 spec=0.3302 bal_acc=0.5680 thr=0.475
+04:04:53 | INFO    |   val      | AUROC=0.6735 AUPRC=0.7342 F1=0.7863 sens=0.8765 spec=0.4340
+04:04:53 | INFO    |   progress | done=48/72 | elapsed=00:27 | avg/exp=0.6s | eta=00:13
+04:04:53 | INFO    | [49/72] horizon=18h | channels=full | model=Dummy_StratifiedFloor | elapsed=00:27 | eta=00:13
+04:04:53 | INFO    |   features: train=(2205, 468) val=(276, 468) test=(276, 468) | dim=468 | feat_time=0.01s
+04:04:53 | INFO    |   timings  | feat=0.01s fit=0.00s predict=0.00s total=0.03s
+04:04:53 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:53 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:53 | INFO    |   progress | done=49/72 | elapsed=00:27 | avg/exp=0.6s | eta=00:12
+04:04:53 | INFO    | [50/72] horizon=18h | channels=full | model=LogReg_L2_balanced | elapsed=00:27 | eta=00:12
+04:04:53 | INFO    |   features: train=(2205, 468) val=(276, 468) test=(276, 468) | dim=468 | feat_time=0.01s
+04:04:53 | INFO    |   timings  | feat=0.01s fit=0.09s predict=0.00s total=0.13s
+04:04:53 | INFO    |   test     | AUROC=0.7181 AUPRC=0.7873 F1=0.7756 sens=0.9353 spec=0.2358 bal_acc=0.5856 thr=0.177
+04:04:53 | INFO    |   val      | AUROC=0.6926 AUPRC=0.7531 F1=0.7912 sens=0.9471 spec=0.2830
+04:04:53 | INFO    |   progress | done=50/72 | elapsed=00:27 | avg/exp=0.6s | eta=00:12
+04:04:53 | INFO    | [51/72] horizon=18h | channels=full | model=RandomForest_balanced | elapsed=00:27 | eta=00:12
+04:04:53 | INFO    |   features: train=(2205, 468) val=(276, 468) test=(276, 468) | dim=468 | feat_time=0.01s
+04:04:54 | INFO    |   timings  | feat=0.01s fit=1.21s predict=0.21s total=1.45s
+04:04:54 | INFO    |   test     | AUROC=0.7576 AUPRC=0.8483 F1=0.7745 sens=0.9294 spec=0.2453 bal_acc=0.5873 thr=0.367
+04:04:54 | INFO    |   val      | AUROC=0.7638 AUPRC=0.8250 F1=0.8077 sens=0.9882 spec=0.2642
+04:04:54 | INFO    |   progress | done=51/72 | elapsed=00:29 | avg/exp=0.6s | eta=00:12
+04:04:54 | INFO    | [52/72] horizon=18h | channels=full | model=ExtraTrees_balanced | elapsed=00:29 | eta=00:12
+04:04:54 | INFO    |   features: train=(2205, 468) val=(276, 468) test=(276, 468) | dim=468 | feat_time=0.01s
+04:04:55 | INFO    |   timings  | feat=0.01s fit=0.87s predict=0.18s total=1.10s
+04:04:55 | INFO    |   test     | AUROC=0.7536 AUPRC=0.8405 F1=0.7900 sens=0.9294 spec=0.3208 bal_acc=0.6251 thr=0.393
+04:04:55 | INFO    |   val      | AUROC=0.7616 AUPRC=0.8099 F1=0.8060 sens=0.9412 spec=0.3679
+04:04:55 | INFO    |   progress | done=52/72 | elapsed=00:30 | avg/exp=0.6s | eta=00:11
+04:04:55 | INFO    | [53/72] horizon=18h | channels=full | model=HistGradBoost | elapsed=00:30 | eta=00:11
+04:04:55 | INFO    |   features: train=(2205, 468) val=(276, 468) test=(276, 468) | dim=468 | feat_time=0.03s
+04:04:56 | INFO    |   timings  | feat=0.03s fit=0.56s predict=0.00s total=0.61s
+04:04:56 | INFO    |   test     | AUROC=0.7447 AUPRC=0.8464 F1=0.7371 sens=0.7588 spec=0.5189 bal_acc=0.6388 thr=0.455
+04:04:56 | INFO    |   val      | AUROC=0.7797 AUPRC=0.8389 F1=0.7988 sens=0.8059 spec=0.6604
+04:04:56 | INFO    |   progress | done=53/72 | elapsed=00:30 | avg/exp=0.6s | eta=00:11
+04:04:56 | INFO    | [54/72] horizon=18h | channels=full | model=MLP_tabular | elapsed=00:30 | eta=00:11
+04:04:56 | INFO    |   features: train=(2205, 468) val=(276, 468) test=(276, 468) | dim=468 | feat_time=0.01s
+04:04:56 | INFO    |   timings  | feat=0.01s fit=0.49s predict=0.00s total=0.52s
+04:04:56 | INFO    |   test     | AUROC=0.7291 AUPRC=0.8227 F1=0.7794 sens=0.9353 spec=0.2547 bal_acc=0.5950 thr=0.265
+04:04:56 | INFO    |   val      | AUROC=0.7067 AUPRC=0.7676 F1=0.7990 sens=0.9824 spec=0.2358
+04:04:56 | INFO    |   progress | done=54/72 | elapsed=00:31 | avg/exp=0.6s | eta=00:10
+04:04:56 | INFO    | [55/72] horizon=24h | channels=values | model=Dummy_StratifiedFloor | elapsed=00:31 | eta=00:10
+04:04:56 | INFO    |   features: train=(2205, 160) val=(276, 160) test=(276, 160) | dim=160 | feat_time=0.01s
+04:04:56 | INFO    |   timings  | feat=0.01s fit=0.00s predict=0.00s total=0.03s
+04:04:56 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:04:56 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:04:56 | INFO    |   progress | done=55/72 | elapsed=00:31 | avg/exp=0.6s | eta=00:09
+04:04:56 | INFO    | [56/72] horizon=24h | channels=values | model=LogReg_L2_balanced | elapsed=00:31 | eta=00:09
+04:04:56 | INFO    |   features: train=(2205, 160) val=(276, 160) test=(276, 160) | dim=160 | feat_time=0.01s
+04:04:57 | INFO    |   timings  | feat=0.01s fit=0.04s predict=0.00s total=0.07s
+04:04:57 | INFO    |   test     | AUROC=0.6987 AUPRC=0.7934 F1=0.7678 sens=0.9824 spec=0.0755 bal_acc=0.5289 thr=0.152
+04:04:57 | INFO    |   val      | AUROC=0.6834 AUPRC=0.7576 F1=0.7742 sens=0.9882 spec=0.0943
+04:04:57 | INFO    |   progress | done=56/72 | elapsed=00:31 | avg/exp=0.6s | eta=00:09
+04:04:57 | INFO    | [57/72] horizon=24h | channels=values | model=RandomForest_balanced | elapsed=00:31 | eta=00:09
+04:04:57 | INFO    |   features: train=(2205, 160) val=(276, 160) test=(276, 160) | dim=160 | feat_time=0.01s
+04:04:58 | INFO    |   timings  | feat=0.01s fit=1.50s predict=0.16s total=1.71s
+04:04:58 | INFO    |   test     | AUROC=0.7190 AUPRC=0.8247 F1=0.7700 sens=0.9353 spec=0.2075 bal_acc=0.5714 thr=0.360
+04:04:58 | INFO    |   val      | AUROC=0.7767 AUPRC=0.8543 F1=0.7990 sens=0.9706 spec=0.2642
+04:04:58 | INFO    |   progress | done=57/72 | elapsed=00:33 | avg/exp=0.6s | eta=00:08
+04:04:58 | INFO    | [58/72] horizon=24h | channels=values | model=ExtraTrees_balanced | elapsed=00:33 | eta=00:08
+04:04:58 | INFO    |   features: train=(2205, 160) val=(276, 160) test=(276, 160) | dim=160 | feat_time=0.02s
+04:04:59 | INFO    |   timings  | feat=0.02s fit=0.76s predict=0.19s total=0.98s
+04:04:59 | INFO    |   test     | AUROC=0.7371 AUPRC=0.8453 F1=0.7659 sens=0.9235 spec=0.2170 bal_acc=0.5703 thr=0.380
+04:04:59 | INFO    |   val      | AUROC=0.7779 AUPRC=0.8613 F1=0.8029 sens=0.9824 spec=0.2547
+04:04:59 | INFO    |   progress | done=58/72 | elapsed=00:34 | avg/exp=0.6s | eta=00:08
+04:04:59 | INFO    | [59/72] horizon=24h | channels=values | model=HistGradBoost | elapsed=00:34 | eta=00:08
+04:04:59 | INFO    |   features: train=(2205, 160) val=(276, 160) test=(276, 160) | dim=160 | feat_time=0.02s
+04:05:00 | INFO    |   timings  | feat=0.02s fit=0.25s predict=0.00s total=0.29s
+04:05:00 | INFO    |   test     | AUROC=0.7171 AUPRC=0.8183 F1=0.7513 sens=0.8353 spec=0.3774 bal_acc=0.6063 thr=0.391
+04:05:00 | INFO    |   val      | AUROC=0.7806 AUPRC=0.8504 F1=0.8021 sens=0.8941 spec=0.4623
+04:05:00 | INFO    |   progress | done=59/72 | elapsed=00:34 | avg/exp=0.6s | eta=00:07
+04:05:00 | INFO    | [60/72] horizon=24h | channels=values | model=MLP_tabular | elapsed=00:34 | eta=00:07
+04:05:00 | INFO    |   features: train=(2205, 160) val=(276, 160) test=(276, 160) | dim=160 | feat_time=0.01s
+04:05:00 | INFO    |   timings  | feat=0.01s fit=0.32s predict=0.00s total=0.35s
+04:05:00 | INFO    |   test     | AUROC=0.7047 AUPRC=0.8092 F1=0.7746 sens=0.9706 spec=0.1415 bal_acc=0.5560 thr=0.284
+04:05:00 | INFO    |   val      | AUROC=0.6944 AUPRC=0.7740 F1=0.7869 sens=0.9882 spec=0.1604
+04:05:00 | INFO    |   progress | done=60/72 | elapsed=00:34 | avg/exp=0.6s | eta=00:06
+04:05:00 | INFO    | [61/72] horizon=24h | channels=values_masks | model=Dummy_StratifiedFloor | elapsed=00:34 | eta=00:06
+04:05:00 | INFO    |   features: train=(2205, 320) val=(276, 320) test=(276, 320) | dim=320 | feat_time=0.02s
+04:05:00 | INFO    |   timings  | feat=0.02s fit=0.00s predict=0.00s total=0.03s
+04:05:00 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:05:00 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:05:00 | INFO    |   progress | done=61/72 | elapsed=00:34 | avg/exp=0.6s | eta=00:06
+04:05:00 | INFO    | [62/72] horizon=24h | channels=values_masks | model=LogReg_L2_balanced | elapsed=00:34 | eta=00:06
+04:05:00 | INFO    |   features: train=(2205, 320) val=(276, 320) test=(276, 320) | dim=320 | feat_time=0.02s
+04:05:00 | INFO    |   timings  | feat=0.02s fit=0.06s predict=0.00s total=0.09s
+04:05:00 | INFO    |   test     | AUROC=0.6814 AUPRC=0.7668 F1=0.7610 sens=0.9647 spec=0.0849 bal_acc=0.5248 thr=0.061
+04:05:00 | INFO    |   val      | AUROC=0.6942 AUPRC=0.7597 F1=0.7752 sens=0.9941 spec=0.0849
+04:05:00 | INFO    |   progress | done=62/72 | elapsed=00:35 | avg/exp=0.6s | eta=00:05
+04:05:00 | INFO    | [63/72] horizon=24h | channels=values_masks | model=RandomForest_balanced | elapsed=00:35 | eta=00:05
+04:05:00 | INFO    |   features: train=(2205, 320) val=(276, 320) test=(276, 320) | dim=320 | feat_time=0.02s
+04:05:02 | INFO    |   timings  | feat=0.02s fit=1.39s predict=0.20s total=1.65s
+04:05:02 | INFO    |   test     | AUROC=0.7262 AUPRC=0.8284 F1=0.7688 sens=0.9000 spec=0.2925 bal_acc=0.5962 thr=0.430
+04:05:02 | INFO    |   val      | AUROC=0.7810 AUPRC=0.8598 F1=0.8080 sens=0.9529 spec=0.3491
+04:05:02 | INFO    |   progress | done=63/72 | elapsed=00:36 | avg/exp=0.6s | eta=00:05
+04:05:02 | INFO    | [64/72] horizon=24h | channels=values_masks | model=ExtraTrees_balanced | elapsed=00:36 | eta=00:05
+04:05:02 | INFO    |   features: train=(2205, 320) val=(276, 320) test=(276, 320) | dim=320 | feat_time=0.04s
+04:05:03 | INFO    |   timings  | feat=0.04s fit=0.81s predict=0.15s total=1.04s
+04:05:03 | INFO    |   test     | AUROC=0.7625 AUPRC=0.8597 F1=0.7962 sens=0.9882 spec=0.2075 bal_acc=0.5979 thr=0.325
+04:05:03 | INFO    |   val      | AUROC=0.7621 AUPRC=0.8491 F1=0.8029 sens=0.9824 spec=0.2547
+04:05:03 | INFO    |   progress | done=64/72 | elapsed=00:37 | avg/exp=0.6s | eta=00:04
+04:05:03 | INFO    | [65/72] horizon=24h | channels=values_masks | model=HistGradBoost | elapsed=00:37 | eta=00:04
+04:05:03 | INFO    |   features: train=(2205, 320) val=(276, 320) test=(276, 320) | dim=320 | feat_time=0.03s
+04:05:03 | INFO    |   timings  | feat=0.03s fit=0.44s predict=0.00s total=0.49s
+04:05:03 | INFO    |   test     | AUROC=0.7295 AUPRC=0.8279 F1=0.7653 sens=0.8824 spec=0.3208 bal_acc=0.6016 thr=0.343
+04:05:03 | INFO    |   val      | AUROC=0.7700 AUPRC=0.8374 F1=0.8020 sens=0.9294 spec=0.3774
+04:05:03 | INFO    |   progress | done=65/72 | elapsed=00:38 | avg/exp=0.6s | eta=00:04
+04:05:03 | INFO    | [66/72] horizon=24h | channels=values_masks | model=MLP_tabular | elapsed=00:38 | eta=00:04
+04:05:03 | INFO    |   features: train=(2205, 320) val=(276, 320) test=(276, 320) | dim=320 | feat_time=0.02s
+04:05:04 | INFO    |   timings  | feat=0.02s fit=0.67s predict=0.00s total=0.70s
+04:05:04 | INFO    |   test     | AUROC=0.7173 AUPRC=0.8055 F1=0.7847 sens=0.9647 spec=0.2075 bal_acc=0.5861 thr=0.104
+04:05:04 | INFO    |   val      | AUROC=0.6709 AUPRC=0.7397 F1=0.7754 sens=0.9647 spec=0.1604
+04:05:04 | INFO    |   progress | done=66/72 | elapsed=00:39 | avg/exp=0.6s | eta=00:03
+04:05:04 | INFO    | [67/72] horizon=24h | channels=full | model=Dummy_StratifiedFloor | elapsed=00:39 | eta=00:03
+04:05:04 | INFO    |   features: train=(2205, 576) val=(276, 576) test=(276, 576) | dim=576 | feat_time=0.02s
+04:05:04 | INFO    |   timings  | feat=0.02s fit=0.00s predict=0.00s total=0.04s
+04:05:04 | INFO    |   test     | AUROC=0.4781 AUPRC=0.6059 F1=0.7623 sens=1.0000 spec=0.0000 bal_acc=0.5000 thr=0.000
+04:05:04 | INFO    |   val      | AUROC=0.4704 AUPRC=0.6025 F1=0.7623 sens=1.0000 spec=0.0000
+04:05:04 | INFO    |   progress | done=67/72 | elapsed=00:39 | avg/exp=0.6s | eta=00:02
+04:05:04 | INFO    | [68/72] horizon=24h | channels=full | model=LogReg_L2_balanced | elapsed=00:39 | eta=00:02
+04:05:04 | INFO    |   features: train=(2205, 576) val=(276, 576) test=(276, 576) | dim=576 | feat_time=0.02s
+04:05:04 | INFO    |   timings  | feat=0.02s fit=0.11s predict=0.00s total=0.15s
+04:05:04 | INFO    |   test     | AUROC=0.7042 AUPRC=0.7600 F1=0.7548 sens=0.9235 spec=0.1604 bal_acc=0.5420 thr=0.084
+04:05:04 | INFO    |   val      | AUROC=0.6799 AUPRC=0.7357 F1=0.7896 sens=0.9824 spec=0.1887
+04:05:04 | INFO    |   progress | done=68/72 | elapsed=00:39 | avg/exp=0.6s | eta=00:02
+04:05:04 | INFO    | [69/72] horizon=24h | channels=full | model=RandomForest_balanced | elapsed=00:39 | eta=00:02
+04:05:04 | INFO    |   features: train=(2205, 576) val=(276, 576) test=(276, 576) | dim=576 | feat_time=0.02s
+04:05:06 | INFO    |   timings  | feat=0.02s fit=1.35s predict=0.18s total=1.58s
+04:05:06 | INFO    |   test     | AUROC=0.7609 AUPRC=0.8577 F1=0.7745 sens=0.9294 spec=0.2453 bal_acc=0.5873 thr=0.360
+04:05:06 | INFO    |   val      | AUROC=0.7876 AUPRC=0.8567 F1=0.8098 sens=0.9765 spec=0.3019
+04:05:06 | INFO    |   progress | done=69/72 | elapsed=00:40 | avg/exp=0.6s | eta=00:01
+04:05:06 | INFO    | [70/72] horizon=24h | channels=full | model=ExtraTrees_balanced | elapsed=00:40 | eta=00:01
+04:05:06 | INFO    |   features: train=(2205, 576) val=(276, 576) test=(276, 576) | dim=576 | feat_time=0.03s
+04:05:07 | INFO    |   timings  | feat=0.03s fit=0.97s predict=0.17s total=1.21s
+04:05:07 | INFO    |   test     | AUROC=0.7633 AUPRC=0.8518 F1=0.7962 sens=0.9765 spec=0.2358 bal_acc=0.6062 thr=0.292
+04:05:07 | INFO    |   val      | AUROC=0.7751 AUPRC=0.8338 F1=0.8077 sens=0.9882 spec=0.2642
+04:05:07 | INFO    |   progress | done=70/72 | elapsed=00:42 | avg/exp=0.6s | eta=00:01
+04:05:07 | INFO    | [71/72] horizon=24h | channels=full | model=HistGradBoost | elapsed=00:42 | eta=00:01
+04:05:07 | INFO    |   features: train=(2205, 576) val=(276, 576) test=(276, 576) | dim=576 | feat_time=0.03s
+04:05:08 | INFO    |   timings  | feat=0.03s fit=0.84s predict=0.00s total=0.90s
+04:05:08 | INFO    |   test     | AUROC=0.7661 AUPRC=0.8520 F1=0.7775 sens=0.8529 spec=0.4528 bal_acc=0.6529 thr=0.395
+04:05:08 | INFO    |   val      | AUROC=0.8042 AUPRC=0.8677 F1=0.8152 sens=0.8824 spec=0.5472
+04:05:08 | INFO    |   progress | done=71/72 | elapsed=00:42 | avg/exp=0.6s | eta=00:00
+04:05:08 | INFO    | [72/72] horizon=24h | channels=full | model=MLP_tabular | elapsed=00:42 | eta=00:00
+04:05:08 | INFO    |   features: train=(2205, 576) val=(276, 576) test=(276, 576) | dim=576 | feat_time=0.02s
+04:05:09 | INFO    |   timings  | feat=0.02s fit=0.58s predict=0.00s total=0.62s
+04:05:09 | INFO    |   test     | AUROC=0.7542 AUPRC=0.8475 F1=0.7810 sens=0.9647 spec=0.1887 bal_acc=0.5767 thr=0.216
+04:05:09 | INFO    |   val      | AUROC=0.7194 AUPRC=0.8010 F1=0.7944 sens=1.0000 spec=0.1698
+04:05:09 | INFO    |   progress | done=72/72 | elapsed=00:43 | avg/exp=0.6s | eta=00:00
+04:05:09 | INFO    | ==============================================================================
+04:05:09 | INFO    | Completed 72 experiments in 00:43
+04:05:09 | INFO    | Saved results table with 72 rows
+04:05:09 | INFO    | Generating plots in results/baselines/plots ...
+04:05:22 | INFO    | Plots saved (13.2s)
+04:05:22 | INFO    | ==============================================================================
+04:05:22 | INFO    | Top 5 by test AUPRC:
+04:05:22 | INFO    |   h=24 | values_masks | ExtraTrees_balanced    | AUROC=0.763 AUPRC=0.860 F1=0.796 sens=0.988 spec=0.208
+04:05:22 | INFO    |   h=24 | full         | RandomForest_balanced  | AUROC=0.761 AUPRC=0.858 F1=0.775 sens=0.929 spec=0.245
+04:05:22 | INFO    |   h=12 | full         | HistGradBoost          | AUROC=0.767 AUPRC=0.854 F1=0.782 sens=0.959 spec=0.208
+04:05:22 | INFO    |   h=24 | full         | HistGradBoost          | AUROC=0.766 AUPRC=0.852 F1=0.777 sens=0.853 spec=0.453
+04:05:22 | INFO    |   h=24 | full         | ExtraTrees_balanced    | AUROC=0.763 AUPRC=0.852 F1=0.796 sens=0.976 spec=0.236
+04:05:22 | INFO    | ==============================================================================
+04:05:22 | INFO    | Done. Total wall-clock time: 00:57
