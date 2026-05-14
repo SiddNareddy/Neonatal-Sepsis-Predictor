@@ -1,14 +1,5 @@
 """Train an evidence-based CNN-Attention-BiLSTM neonatal sepsis predictor.
 
-The architecture is informed by:
-    - Das et al. (2025), "An attention-based bidirectional LSTM-CNN architecture
-      for the early prediction of sepsis", Int. J. Data Sci. & Analytics.
-    - Saqib et al. (2020), "SSP: Early prediction of sepsis using a fully
-      connected LSTM-CNN model", Computers in Biology and Medicine.
-    - Beaulieu-Jones et al. and follow-up MIMIC-III sepsis modelling work.
-    - Caicedo-Torres & Gutierrez (2020), "ISeeU: a hybrid CNN-BiLSTM mortality
-      predictor on ICU vital signs".
-
 It uses:
     - 2 stacked dilated 1D convolutional blocks (BatchNorm + GELU + dropout)
       to capture local physiologic motifs.
@@ -83,10 +74,6 @@ from sklearn.metrics import (
 )
 from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
 
-# ---------------------------------------------------------------------------
-# Constants and channel groupings (must match preprocessing notebook output)
-# ---------------------------------------------------------------------------
-
 NUM_VITAL_CHANNELS = 5
 NUM_OBSERVED_MASK_CHANNELS = 5
 NUM_SOURCE_MASK_CHANNELS = 8
@@ -118,12 +105,6 @@ def format_duration(seconds: float) -> str:
 def human_int(value: int) -> str:
     return f"{int(value):,}"
 
-
-# ---------------------------------------------------------------------------
-# Data loading
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class SepsisData:
     X_train: np.ndarray
@@ -140,9 +121,14 @@ class SepsisData:
     train_subject_ids: np.ndarray
     val_subject_ids: np.ndarray
     test_subject_ids: np.ndarray
+    X_static_train: np.ndarray | None = None
+    X_static_val: np.ndarray | None = None
+    X_static_test: np.ndarray | None = None
+    static_feature_names: list[str] = field(default_factory=list)
     horizon_max: int = 24
 
     def summary(self) -> dict[str, Any]:
+        has_static = self.X_static_train is not None
         return {
             "channel_names": self.channel_names,
             "label_names": self.label_names,
@@ -157,6 +143,8 @@ class SepsisData:
                 "test": np.bincount(self.y_test.astype(int)).tolist(),
             },
             "horizon_max": self.horizon_max,
+            "has_static_features": has_static,
+            "n_static_features": int(self.X_static_train.shape[1]) if has_static else 0,
         }
 
 
@@ -175,6 +163,27 @@ def load_data(npz_path: Path) -> SepsisData:
     if missing:
         raise KeyError(f"Missing keys in {npz_path}: {missing}")
 
+    static_arrays: dict[str, np.ndarray | None] = {
+        "X_static_train": None,
+        "X_static_val": None,
+        "X_static_test": None,
+    }
+    static_feature_names: list[str] = []
+    has_all_static = all(
+        k in raw.files for k in ("X_static_train", "X_static_val", "X_static_test")
+    )
+    if has_all_static:
+        static_arrays = {
+            "X_static_train": raw["X_static_train"].astype(np.float32),
+            "X_static_val": raw["X_static_val"].astype(np.float32),
+            "X_static_test": raw["X_static_test"].astype(np.float32),
+        }
+        if "static_feature_names" in raw.files:
+            static_feature_names = [str(s) for s in raw["static_feature_names"].tolist()]
+        else:
+            static_dim = int(static_arrays["X_static_train"].shape[1])
+            static_feature_names = [f"static_{i}" for i in range(static_dim)]
+
     data = SepsisData(
         X_train=raw["X_train"].astype(np.float32),
         y_train=raw["y_train"].astype(np.int64),
@@ -190,6 +199,10 @@ def load_data(npz_path: Path) -> SepsisData:
         train_subject_ids=raw["train_subject_ids"],
         val_subject_ids=raw["val_subject_ids"],
         test_subject_ids=raw["test_subject_ids"],
+        X_static_train=static_arrays["X_static_train"],
+        X_static_val=static_arrays["X_static_val"],
+        X_static_test=static_arrays["X_static_test"],
+        static_feature_names=static_feature_names,
         horizon_max=int(raw["X_train"].shape[1]),
     )
 
@@ -202,6 +215,32 @@ def load_data(npz_path: Path) -> SepsisData:
                 f"length {len(data.channel_names)}"
             )
 
+    if data.X_static_train is not None:
+        for split_name, s_arr, y_arr in [
+            ("train", data.X_static_train, data.y_train),
+            ("val", data.X_static_val, data.y_val),
+            ("test", data.X_static_test, data.y_test),
+        ]:
+            if s_arr is None:
+                raise ValueError("Static arrays must be present for all splits if provided")
+            if np.isnan(s_arr).any() or np.isinf(s_arr).any():
+                raise ValueError(f"X_static_{split_name} contains NaN/Inf")
+            if s_arr.ndim != 2:
+                raise ValueError(f"X_static_{split_name} must be 2D; got shape {s_arr.shape}")
+            if s_arr.shape[0] != y_arr.shape[0]:
+                raise ValueError(
+                    f"X_static_{split_name} rows {s_arr.shape[0]} mismatch "
+                    f"y_{split_name} rows {y_arr.shape[0]}"
+                )
+        static_dim = int(data.X_static_train.shape[1])
+        if int(data.X_static_val.shape[1]) != static_dim or int(data.X_static_test.shape[1]) != static_dim:
+            raise ValueError("Static feature dimensions mismatch across splits")
+        if data.static_feature_names and len(data.static_feature_names) != static_dim:
+            raise ValueError(
+                "static_feature_names length mismatch static dim: "
+                f"{len(data.static_feature_names)} != {static_dim}"
+            )
+
     return data
 
 
@@ -211,12 +250,6 @@ def slice_view(X: np.ndarray, channel_set: str, horizon: int) -> np.ndarray:
     if not (1 <= horizon <= X.shape[1]):
         raise ValueError(f"Horizon {horizon} out of range")
     return np.ascontiguousarray(X[:, :horizon, CHANNEL_SETS[channel_set]])
-
-
-# ---------------------------------------------------------------------------
-# Model definition
-# ---------------------------------------------------------------------------
-
 
 class TemporalConvBlock(nn.Module):
     """Conv1D -> BatchNorm -> GELU -> Dropout, residual when shapes allow.
@@ -259,8 +292,7 @@ class TemporalConvBlock(nn.Module):
 
 
 class TemporalAttentionGate(nn.Module):
-    """Lightweight per-time-step attention gate, mirroring the gating used in
-    Das et al. (2025) and the lightweight CNN-Attention-BiLSTM ECG model."""
+    """Lightweight per-time-step attention gate"""
 
     def __init__(self, channels: int) -> None:
         super().__init__()
@@ -302,9 +334,13 @@ class CNNAttentionBiLSTM(nn.Module):
         dropout: float = 0.3,
         head_hidden: int = 96,
         input_feature_dropout: float = 0.05,
+        static_dim: int = 0,
+        static_hidden: int = 32,
+        static_dropout: float = 0.1,
     ) -> None:
         super().__init__()
         self.input_feature_dropout = input_feature_dropout
+        self.static_dim = int(static_dim)
 
         self.conv1 = TemporalConvBlock(
             in_channels, conv_channels[0],
@@ -331,6 +367,17 @@ class CNNAttentionBiLSTM(nn.Module):
         self.attn_pool = AdditiveAttentionPool(hidden_size=2 * lstm_hidden)
 
         head_in = 2 * lstm_hidden + 2 * lstm_hidden  # pooled + final fwd/bwd states
+        if self.static_dim > 0:
+            self.static_encoder = nn.Sequential(
+                nn.LayerNorm(self.static_dim),
+                nn.Linear(self.static_dim, static_hidden),
+                nn.GELU(),
+                nn.Dropout(static_dropout),
+            )
+            head_in += static_hidden
+        else:
+            self.static_encoder = None
+
         self.head = nn.Sequential(
             nn.LayerNorm(head_in),
             nn.Dropout(dropout),
@@ -351,6 +398,7 @@ class CNNAttentionBiLSTM(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
+        static: torch.Tensor | None = None,
         return_attention: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # x: (B, T, C)
@@ -369,15 +417,14 @@ class CNNAttentionBiLSTM(nn.Module):
 
         pooled, attn_weights = self.attn_pool(lstm_out)
         rep = torch.cat([pooled, last_states], dim=-1)
+        if self.static_encoder is not None:
+            if static is None:
+                raise ValueError("Static tensor is required when static_dim > 0")
+            static_rep = self.static_encoder(static.to(x.dtype))
+            rep = torch.cat([rep, static_rep], dim=-1)
 
         logit = self.head(rep).squeeze(-1)
         return logit, attn_weights if return_attention else None
-
-
-# ---------------------------------------------------------------------------
-# Training utilities
-# ---------------------------------------------------------------------------
-
 
 def set_seed(seed: int) -> None:
     random.seed(seed)
@@ -403,16 +450,18 @@ def select_device(prefer: str = "auto") -> torch.device:
 
 def make_dataloader(
     X: np.ndarray,
+    X_static: np.ndarray | None,
     y: np.ndarray,
     batch_size: int,
     shuffle: bool,
     sampler: WeightedRandomSampler | None = None,
     drop_last: bool = False,
 ) -> DataLoader:
-    ds = TensorDataset(
-        torch.from_numpy(X.astype(np.float32)),
-        torch.from_numpy(y.astype(np.float32)),
-    )
+    tensors: list[torch.Tensor] = [torch.from_numpy(X.astype(np.float32))]
+    if X_static is not None:
+        tensors.append(torch.from_numpy(X_static.astype(np.float32)))
+    tensors.append(torch.from_numpy(y.astype(np.float32)))
+    ds = TensorDataset(*tensors)
     return DataLoader(
         ds,
         batch_size=batch_size,
@@ -442,20 +491,112 @@ def compute_pos_weight(y: np.ndarray) -> torch.Tensor:
         return torch.tensor(1.0)
     return torch.tensor(float(neg) / float(pos))
 
+THRESHOLD_MODES = (
+    "max_f1",
+    "max_balanced_accuracy",
+    "sensitivity_at_specificity",
+    "specificity_at_sensitivity",
+    "fixed",
+)
 
-# ---------------------------------------------------------------------------
-# Metrics
-# ---------------------------------------------------------------------------
+
+def candidate_thresholds(y_score: np.ndarray) -> np.ndarray:
+    """Build stable threshold candidates: all unique validation scores + 0.5."""
+    return np.sort(np.union1d(np.unique(y_score), [0.5]))
+
+
+def _sweep_metrics(y_true: np.ndarray, y_score: np.ndarray) -> list[dict[str, float]]:
+    """Compute sens/spec/balanced-accuracy/F1 at every candidate threshold."""
+    thrs = candidate_thresholds(y_score)
+    eps = 1e-12
+    rows: list[dict[str, float]] = []
+    for t in thrs:
+        preds = (y_score >= t).astype(int)
+        tp = float(((preds == 1) & (y_true == 1)).sum())
+        fp = float(((preds == 1) & (y_true == 0)).sum())
+        tn = float(((preds == 0) & (y_true == 0)).sum())
+        fn = float(((preds == 0) & (y_true == 1)).sum())
+        sens = tp / (tp + fn + eps)
+        spec = tn / (tn + fp + eps)
+        ba = (sens + spec) / 2
+        prec_v = tp / (tp + fp + eps)
+        f1 = 2 * prec_v * sens / (prec_v + sens + eps)
+        rows.append({
+            "threshold": float(t),
+            "sensitivity": float(sens),
+            "specificity": float(spec),
+            "balanced_accuracy": float(ba),
+            "f1": float(f1),
+        })
+    return rows
+
+
+def select_threshold(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    mode: str,
+    min_sensitivity: float = 0.90,
+    min_specificity: float = 0.70,
+    fixed_threshold: float = 0.5,
+) -> tuple[float, float, bool]:
+    """Select a decision threshold on *validation* data using the given mode.
+
+    Returns
+    -------
+    (selected_threshold, objective_value, threshold_fallback)
+        objective_value is the primary optimised quantity at the selected threshold
+        (NaN for ``fixed`` mode).
+        threshold_fallback is True when a constrained mode found no feasible
+        threshold and fell back to max balanced accuracy.
+    """
+    if mode == "fixed":
+        return float(fixed_threshold), float("nan"), False
+
+    sweep = _sweep_metrics(y_true, y_score)
+    if not sweep:
+        return 0.5, 0.0, False
+
+    if mode == "max_f1":
+        best = max(sweep, key=lambda r: (r["f1"], r["balanced_accuracy"]))
+        return best["threshold"], best["f1"], False
+
+    if mode == "max_balanced_accuracy":
+        best = max(sweep, key=lambda r: (r["balanced_accuracy"], r["f1"]))
+        return best["threshold"], best["balanced_accuracy"], False
+
+    if mode == "sensitivity_at_specificity":
+        valid = [r for r in sweep if r["specificity"] >= min_specificity - 1e-9]
+        if not valid:
+            logger.warning(
+                "select_threshold: no threshold satisfies specificity>=%.2f "
+                "(mode=%s); falling back to max_balanced_accuracy",
+                min_specificity, mode,
+            )
+            best = max(sweep, key=lambda r: (r["balanced_accuracy"], r["f1"]))
+            return best["threshold"], best["balanced_accuracy"], True
+        best = max(valid, key=lambda r: (r["sensitivity"], r["balanced_accuracy"], r["f1"]))
+        return best["threshold"], best["sensitivity"], False
+
+    if mode == "specificity_at_sensitivity":
+        valid = [r for r in sweep if r["sensitivity"] >= min_sensitivity - 1e-9]
+        if not valid:
+            logger.warning(
+                "select_threshold: no threshold satisfies sensitivity>=%.2f "
+                "(mode=%s); falling back to max_balanced_accuracy",
+                min_sensitivity, mode,
+            )
+            best = max(sweep, key=lambda r: (r["balanced_accuracy"], r["f1"]))
+            return best["threshold"], best["balanced_accuracy"], True
+        best = max(valid, key=lambda r: (r["specificity"], r["balanced_accuracy"], r["f1"]))
+        return best["threshold"], best["specificity"], False
+
+    raise ValueError(f"Unknown threshold mode: {mode!r}. Must be one of {THRESHOLD_MODES}")
 
 
 def tune_threshold(y_true: np.ndarray, y_score: np.ndarray) -> tuple[float, float]:
-    precision, recall, thresholds = precision_recall_curve(y_true, y_score)
-    if thresholds.size == 0:
-        return 0.5, 0.0
-    eps = 1e-12
-    f1 = 2 * precision[:-1] * recall[:-1] / (precision[:-1] + recall[:-1] + eps)
-    best_idx = int(np.nanargmax(f1))
-    return float(thresholds[best_idx]), float(f1[best_idx])
+    """Backward-compatible wrapper: max-F1 threshold selection."""
+    t, obj, _ = select_threshold(y_true, y_score, mode="max_f1")
+    return t, obj
 
 
 def compute_metrics(
@@ -484,12 +625,6 @@ def compute_metrics(
     }
     return metrics
 
-
-# ---------------------------------------------------------------------------
-# Training loop
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class TrainConfig:
     horizon: int
@@ -510,6 +645,9 @@ class TrainConfig:
     dilations: tuple[int, int]
     dropout: float
     head_hidden: int
+    static_mode: str
+    static_hidden: int
+    static_dropout: float
     seed: int
     device: str
 
@@ -526,6 +664,10 @@ class TrainArtifacts:
     val_attention: np.ndarray | None
     test_attention: np.ndarray | None
     n_params: int
+    n_dynamic_channels: int
+    static_dim: int
+    total_input_features: int
+    static_mode: str
     train_seconds: float
 
 
@@ -540,9 +682,15 @@ def evaluate(
     targets: list[np.ndarray] = []
     attentions: list[np.ndarray] = []
     with torch.no_grad():
-        for xb, yb in loader:
+        for batch in loader:
+            if len(batch) == 3:
+                xb, sb, yb = batch
+                sb = sb.to(device)
+            else:
+                xb, yb = batch
+                sb = None
             xb = xb.to(device)
-            logits, attn = model(xb, return_attention=return_attention)
+            logits, attn = model(xb, static=sb, return_attention=return_attention)
             probs = torch.sigmoid(logits)
             scores.append(probs.detach().cpu().numpy())
             targets.append(yb.numpy())
@@ -566,14 +714,25 @@ def train_one_experiment(
     X_va = slice_view(data.X_val, config.channel_set, config.horizon)
     X_te = slice_view(data.X_test, config.channel_set, config.horizon)
     in_channels = X_tr.shape[-1]
+    use_static = config.static_mode == "static"
+    S_tr = data.X_static_train if use_static else None
+    S_va = data.X_static_val if use_static else None
+    S_te = data.X_static_test if use_static else None
+    if use_static:
+        if S_tr is None or S_va is None or S_te is None:
+            raise ValueError("static_mode='static' requested but static arrays are missing in dataset")
+        static_dim = int(S_tr.shape[1])
+    else:
+        static_dim = 0
+    total_input_features = int(in_channels + static_dim)
 
     sampler = make_balanced_sampler(data.y_train) if config.use_sampler else None
     train_loader = make_dataloader(
-        X_tr, data.y_train,
+        X_tr, S_tr, data.y_train,
         batch_size=config.batch_size, shuffle=True, sampler=sampler,
     )
-    val_loader = make_dataloader(X_va, data.y_val, batch_size=512, shuffle=False)
-    test_loader = make_dataloader(X_te, data.y_test, batch_size=512, shuffle=False)
+    val_loader = make_dataloader(X_va, S_va, data.y_val, batch_size=512, shuffle=False)
+    test_loader = make_dataloader(X_te, S_te, data.y_test, batch_size=512, shuffle=False)
 
     model = CNNAttentionBiLSTM(
         in_channels=in_channels,
@@ -584,6 +743,9 @@ def train_one_experiment(
         lstm_layers=config.lstm_layers,
         dropout=config.dropout,
         head_hidden=config.head_hidden,
+        static_dim=static_dim,
+        static_hidden=config.static_hidden,
+        static_dropout=config.static_dropout,
     ).to(device)
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -615,8 +777,8 @@ def train_one_experiment(
     logger.info("-" * 78)
     logger.info("Experiment: horizon=%dh | channel_set=%s", config.horizon, config.channel_set)
     logger.info("Device     : %s", device)
-    logger.info("Input      : (T=%d, C=%d) | train=%s val=%s test=%s",
-                config.horizon, in_channels,
+    logger.info("Input      : mode=%s | (T=%d, C=%d, static=%d) | total_features=%d | train=%s val=%s test=%s",
+                config.static_mode, config.horizon, in_channels, static_dim, total_input_features,
                 X_tr.shape, X_va.shape, X_te.shape)
     logger.info("Class bal  : train pos=%s neg=%s (pos_frac=%.3f) | val pos=%s neg=%s | test pos=%s neg=%s",
                 human_int(train_pos), human_int(train_neg), train_pos_frac,
@@ -629,9 +791,10 @@ def train_one_experiment(
     logger.info("Schedule   : ReduceLROnPlateau (monitor=%s, factor=0.5, patience=%d)",
                 config.monitor, max(2, config.early_stop_patience // 2))
     logger.info("Stopping   : early_stop_patience=%d | epochs<=%d", config.early_stop_patience, config.epochs)
-    logger.info("Model      : params=%s | conv=%s | kernels=%s | dilations=%s | lstm=%dx%d | head=%d | dropout=%.2f",
+    logger.info("Model      : params=%s | conv=%s | kernels=%s | dilations=%s | lstm=%dx%d | head=%d | dropout=%.2f | static_hidden=%d static_dropout=%.2f",
                 human_int(n_params), config.conv_channels, config.kernel_sizes, config.dilations,
-                config.lstm_layers, config.lstm_hidden, config.head_hidden, config.dropout)
+                config.lstm_layers, config.lstm_hidden, config.head_hidden, config.dropout,
+                config.static_hidden, config.static_dropout)
     logger.info("Train      : batch_size=%d | batches/epoch=%d", config.batch_size, batches_per_epoch)
     logger.info("-" * 78)
 
@@ -661,11 +824,17 @@ def train_one_experiment(
             file=sys.stdout,
             leave=False,
         )
-        for xb, yb in batch_pbar:
+        for batch in batch_pbar:
+            if len(batch) == 3:
+                xb, sb, yb = batch
+                sb = sb.to(device)
+            else:
+                xb, yb = batch
+                sb = None
             xb = xb.to(device)
             yb = yb.to(device)
             optimizer.zero_grad()
-            logits, _ = model(xb)
+            logits, _ = model(xb, static=sb)
             loss = criterion(logits, yb)
             loss.backward()
             if config.grad_clip > 0:
@@ -790,19 +959,21 @@ def train_one_experiment(
         val_attention=val_attn,
         test_attention=test_attn,
         n_params=n_params,
+        n_dynamic_channels=int(in_channels),
+        static_dim=int(static_dim),
+        total_input_features=total_input_features,
+        static_mode=config.static_mode,
         train_seconds=train_seconds,
     )
-
-
-# ---------------------------------------------------------------------------
-# Reporting
-# ---------------------------------------------------------------------------
-
 
 @dataclass
 class ExperimentRecord:
     horizon: int
     channel_set: str
+    static_mode: str
+    uses_static: bool
+    static_dim: int
+    n_dynamic_channels: int
     val_metrics: dict[str, float]
     test_metrics: dict[str, float]
     val_threshold: float
@@ -810,12 +981,27 @@ class ExperimentRecord:
     train_seconds: float
     n_features: int
     epochs_run: int
+    threshold_mode: str = "max_f1"
+    threshold_objective_value: float = 0.0
+    threshold_fallback: bool = False
+    min_sensitivity: float = 0.90
+    min_specificity: float = 0.70
 
     def to_row(self) -> dict[str, Any]:
         row: dict[str, Any] = {
             "horizon": self.horizon,
             "channel_set": self.channel_set,
+            "static_mode": self.static_mode,
+            "uses_static": self.uses_static,
+            "static_dim": self.static_dim,
+            "n_dynamic_channels": self.n_dynamic_channels,
             "model": "CNN-Attn-BiLSTM",
+            "threshold_mode": self.threshold_mode,
+            "selected_threshold": round(self.val_threshold, 4),
+            "threshold_objective_value": round(self.threshold_objective_value, 6) if not (self.threshold_objective_value != self.threshold_objective_value) else float("nan"),
+            "threshold_fallback": self.threshold_fallback,
+            "min_sensitivity": round(self.min_sensitivity, 4),
+            "min_specificity": round(self.min_specificity, 4),
             "n_features": self.n_features,
             "n_params": self.n_params,
             "train_seconds": round(self.train_seconds, 3),
@@ -837,13 +1023,15 @@ def _format_md_table(df: pd.DataFrame) -> str:
 
 
 def write_markdown_report(df: pd.DataFrame, out_path: Path) -> None:
-    cols = [
-        "model",
+    base_cols = [
+        "model", "static_mode", "threshold_mode",
         "test_auroc", "test_auprc",
         "test_balanced_accuracy", "test_recall_sensitivity",
         "test_specificity", "test_f1", "test_brier",
-        "val_threshold", "epochs_run", "n_params", "train_seconds",
+        "selected_threshold", "threshold_objective_value", "threshold_fallback",
+        "epochs_run", "static_dim", "n_dynamic_channels", "n_params", "train_seconds",
     ]
+    cols = [c for c in base_cols if c in df.columns]
     lines = ["# CNN-Attention-BiLSTM Results", ""]
 
     overall = (
@@ -870,22 +1058,27 @@ def write_markdown_report(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def write_html_report(df: pd.DataFrame, out_path: Path) -> None:
-    cols = [
-        "horizon", "channel_set", "model",
+    base_cols = [
+        "horizon", "channel_set", "static_mode", "model",
+        "threshold_mode", "selected_threshold", "threshold_fallback",
         "test_auroc", "test_auprc",
         "test_balanced_accuracy", "test_recall_sensitivity",
         "test_specificity", "test_f1", "test_brier",
-        "val_threshold", "epochs_run", "n_params", "train_seconds",
+        "epochs_run", "static_dim", "n_dynamic_channels", "n_params", "train_seconds",
     ]
+    cols = [c for c in base_cols if c in df.columns]
+    fmt = {
+        "test_auroc": "{:.4f}", "test_auprc": "{:.4f}",
+        "test_balanced_accuracy": "{:.4f}",
+        "test_recall_sensitivity": "{:.4f}", "test_specificity": "{:.4f}",
+        "test_f1": "{:.4f}", "test_brier": "{:.4f}",
+        "train_seconds": "{:.2f}",
+    }
+    if "selected_threshold" in cols:
+        fmt["selected_threshold"] = "{:.4f}"
     styled = (
         df[cols]
-        .style.format({
-            "test_auroc": "{:.4f}", "test_auprc": "{:.4f}",
-            "test_balanced_accuracy": "{:.4f}",
-            "test_recall_sensitivity": "{:.4f}", "test_specificity": "{:.4f}",
-            "test_f1": "{:.4f}", "test_brier": "{:.4f}",
-            "val_threshold": "{:.4f}", "train_seconds": "{:.2f}",
-        })
+        .style.format(fmt)
         .background_gradient(subset=["test_auroc", "test_auprc"], cmap="Greens")
         .set_caption("Neonatal sepsis CNN-Attention-BiLSTM — test set metrics")
         .set_table_styles([
@@ -1030,6 +1223,11 @@ def plot_attention_examples(
 
 def plot_horizon_and_ablation(df: pd.DataFrame, plots_dir: Path) -> None:
     sns.set_style("whitegrid")
+    df = df.copy()
+    df["ablation_label"] = (
+        df["channel_set"].astype(str) + " | " + df["static_mode"].astype(str)
+        + " | " + df.get("threshold_mode", pd.Series("max_f1", index=df.index)).astype(str)
+    )
 
     for metric, title in [
         ("test_auroc", "Test AUROC"),
@@ -1039,13 +1237,13 @@ def plot_horizon_and_ablation(df: pd.DataFrame, plots_dir: Path) -> None:
     ]:
         fig, ax = plt.subplots(figsize=(9, 5))
         sns.barplot(
-            data=df, x="horizon", y=metric, hue="channel_set", ax=ax,
+            data=df, x="horizon", y=metric, hue="ablation_label", ax=ax,
         )
-        ax.set_title(f"{title} by horizon and channel set")
+        ax.set_title(f"{title} by horizon and ablation")
         ax.set_ylim(0, 1)
         ax.set_xlabel("Hours of data used")
         ax.set_ylabel(title)
-        ax.legend(title="Channel set")
+        ax.legend(title="Ablation")
         _save_fig(fig, plots_dir, f"horizon_comparison_{metric}")
 
     for metric, title in [
@@ -1054,7 +1252,7 @@ def plot_horizon_and_ablation(df: pd.DataFrame, plots_dir: Path) -> None:
         ("test_f1", "Test F1"),
     ]:
         pivot = df.pivot_table(
-            index="channel_set", columns="horizon", values=metric, aggfunc="max",
+            index="ablation_label", columns="horizon", values=metric, aggfunc="max",
         )
         if pivot.empty:
             continue
@@ -1102,6 +1300,46 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dilations", type=int, nargs=2, default=[1, 2])
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--head-hidden", type=int, default=96)
+    parser.add_argument("--static-hidden", type=int, default=32)
+    parser.add_argument("--static-dropout", type=float, default=0.1)
+    parser.add_argument(
+        "--static-modes",
+        type=str,
+        nargs="+",
+        choices=["none", "static"],
+        default=["none"],
+        help="Ablation modes: none (dynamic only), static (late fusion with static tensor).",
+    )
+    parser.add_argument(
+        "--threshold-modes",
+        type=str,
+        nargs="+",
+        choices=list(THRESHOLD_MODES),
+        default=["max_f1"],
+        help=(
+            "Threshold selection strategies to evaluate at final test time. "
+            "One ExperimentRecord per mode is produced without retraining. "
+            "Default: max_f1 (preserves previous behaviour)."
+        ),
+    )
+    parser.add_argument(
+        "--min-specificity",
+        type=float,
+        default=0.70,
+        help="Minimum validation specificity for sensitivity_at_specificity mode.",
+    )
+    parser.add_argument(
+        "--min-sensitivity",
+        type=float,
+        default=0.90,
+        help="Minimum validation sensitivity for specificity_at_sensitivity mode.",
+    )
+    parser.add_argument(
+        "--fixed-threshold",
+        type=float,
+        default=0.5,
+        help="Decision threshold used for the 'fixed' mode.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="auto",
                         choices=["auto", "cpu", "cuda", "mps"])
@@ -1140,6 +1378,13 @@ def main(argv: list[str] | None = None) -> int:
     if not horizons:
         raise SystemExit("No valid horizons provided")
     channel_sets = list(args.channel_sets)
+    static_modes = list(dict.fromkeys(args.static_modes))
+    if "static" in static_modes and data.X_static_train is None:
+        raise SystemExit(
+            "Requested static mode but dataset has no X_static_* arrays. "
+            "Use the late-fusion NPZ generated by the notebook addendum."
+        )
+    threshold_modes = list(dict.fromkeys(args.threshold_modes))
 
     config_serialised = {
         "data": str(args.data),
@@ -1162,6 +1407,13 @@ def main(argv: list[str] | None = None) -> int:
         "dilations": list(args.dilations),
         "dropout": args.dropout,
         "head_hidden": args.head_hidden,
+        "static_hidden": args.static_hidden,
+        "static_dropout": args.static_dropout,
+        "static_modes": static_modes,
+        "threshold_modes": threshold_modes,
+        "min_sensitivity": args.min_sensitivity,
+        "min_specificity": args.min_specificity,
+        "fixed_threshold": args.fixed_threshold,
         "seed": args.seed,
         "device": args.device,
         "dataset_summary": summary,
@@ -1169,18 +1421,24 @@ def main(argv: list[str] | None = None) -> int:
     (out_dir / "run_config.json").write_text(json.dumps(config_serialised, indent=2), encoding="utf-8")
 
     records: list[ExperimentRecord] = []
-    total = len(horizons) * len(channel_sets)
+    total = len(horizons) * len(channel_sets) * len(static_modes)
     counter = 0
 
     logger.info("=" * 78)
     logger.info(
-        "Plan: %d CNN-Attn-BiLSTM experiments = %d horizon(s) x %d channel set(s)",
-        total, len(horizons), len(channel_sets),
+        "Plan: %d CNN-Attn-BiLSTM training runs = %d horizon(s) x %d channel set(s) x %d static mode(s)",
+        total, len(horizons), len(channel_sets), len(static_modes),
     )
-    logger.info("Horizons      : %s", horizons)
-    logger.info("Channel sets  : %s", channel_sets)
     logger.info(
-        "Per-experiment: epochs<=%d | batch_size=%d | early_stop=%d | monitor=%s | device=%s",
+        "      %d result rows = training runs x %d threshold mode(s)",
+        total * len(threshold_modes), len(threshold_modes),
+    )
+    logger.info("Horizons        : %s", horizons)
+    logger.info("Channel sets    : %s", channel_sets)
+    logger.info("Static modes    : %s", static_modes)
+    logger.info("Threshold modes : %s", threshold_modes)
+    logger.info(
+        "Per-experiment  : epochs<=%d | batch_size=%d | early_stop=%d | monitor=%s | device=%s",
         args.epochs, args.batch_size, args.early_stop_patience, args.monitor, args.device,
     )
     logger.info("=" * 78)
@@ -1189,140 +1447,195 @@ def main(argv: list[str] | None = None) -> int:
 
     for horizon in horizons:
         for channel_set in channel_sets:
-            counter += 1
-            exp_id = f"h{horizon:02d}__{channel_set}"
-            exp_dir = out_dir / exp_id
-            exp_dir.mkdir(parents=True, exist_ok=True)
+            for static_mode in static_modes:
+                counter += 1
+                exp_id = f"h{horizon:02d}__{channel_set}__static_{static_mode}"
+                exp_dir = out_dir / exp_id
+                exp_dir.mkdir(parents=True, exist_ok=True)
 
-            elapsed_so_far = time.time() - run_started
-            avg_so_far = elapsed_so_far / max(counter - 1, 1)
-            eta_pre = avg_so_far * (total - counter + 1) if counter > 1 else 0.0
-            logger.info(
-                "[%d/%d] Starting %s | elapsed=%s | eta=%s",
-                counter, total, exp_id,
-                format_duration(elapsed_so_far),
-                format_duration(eta_pre) if counter > 1 else "??:??",
-            )
-
-            tcfg = TrainConfig(
-                horizon=horizon,
-                channel_set=channel_set,
-                epochs=args.epochs,
-                batch_size=args.batch_size,
-                lr=args.lr,
-                weight_decay=args.weight_decay,
-                grad_clip=args.grad_clip,
-                early_stop_patience=args.early_stop_patience,
-                use_sampler=args.use_sampler,
-                use_pos_weight=not args.no_pos_weight,
-                monitor=args.monitor,
-                lstm_hidden=args.lstm_hidden,
-                lstm_layers=args.lstm_layers,
-                conv_channels=tuple(args.conv_channels),
-                kernel_sizes=tuple(args.kernel_sizes),
-                dilations=tuple(args.dilations),
-                dropout=args.dropout,
-                head_hidden=args.head_hidden,
-                seed=args.seed,
-                device=args.device,
-            )
-
-            try:
-                artifacts = train_one_experiment(data=data, config=tcfg, out_dir=exp_dir)
-            except Exception as exc:
-                logger.exception("Experiment %s failed: %s", exp_id, exc)
-                continue
-
-            torch.save(
-                {
-                    "state_dict": artifacts.best_state_dict,
-                    "config": config_serialised,
-                    "experiment": {
-                        "horizon": horizon,
-                        "channel_set": channel_set,
-                        "in_channels": int(slice_view(data.X_train, channel_set, horizon).shape[-1]),
-                    },
-                    "val_threshold": artifacts.val_threshold,
-                    "val_metrics": artifacts.val_metrics,
-                    "test_metrics": artifacts.test_metrics,
-                },
-                exp_dir / "best_model.pt",
-            )
-
-            history_df = pd.DataFrame(artifacts.history)
-            history_df.to_csv(exp_dir / "training_history.csv", index=False)
-
-            pred_rows: list[dict[str, Any]] = []
-            for split_name, hadm_ids, subject_ids, y_true, y_score in [
-                ("val", data.val_hadm_ids, data.val_subject_ids, data.y_val, artifacts.val_predictions),
-                ("test", data.test_hadm_ids, data.test_subject_ids, data.y_test, artifacts.test_predictions),
-            ]:
-                preds = (y_score >= artifacts.val_threshold).astype(int)
-                for hadm, subj, yt, ys, p in zip(hadm_ids, subject_ids, y_true, y_score, preds):
-                    pred_rows.append({
-                        "split": split_name,
-                        "hadm_id": int(hadm),
-                        "subject_id": int(subj),
-                        "y_true": int(yt),
-                        "y_score": float(ys),
-                        "y_pred": int(p),
-                        "threshold": float(artifacts.val_threshold),
-                    })
-            pd.DataFrame(pred_rows).to_csv(exp_dir / "predictions.csv", index=False)
-
-            if not args.no_plots:
-                plots_dir = exp_dir / "plots"
-                plot_training_history(artifacts.history, plots_dir)
-                plot_test_curves(
-                    data.y_test, artifacts.test_predictions, artifacts.val_threshold, plots_dir,
-                )
-                plot_attention_examples(
-                    data.y_test, artifacts.test_predictions, artifacts.val_threshold,
-                    artifacts.test_attention, plots_dir, horizon=horizon, title_prefix="Test",
+                elapsed_so_far = time.time() - run_started
+                avg_so_far = elapsed_so_far / max(counter - 1, 1)
+                eta_pre = avg_so_far * (total - counter + 1) if counter > 1 else 0.0
+                logger.info(
+                    "[%d/%d] Starting %s | elapsed=%s | eta=%s",
+                    counter, total, exp_id,
+                    format_duration(elapsed_so_far),
+                    format_duration(eta_pre) if counter > 1 else "??:??",
                 )
 
-            records.append(
-                ExperimentRecord(
+                tcfg = TrainConfig(
                     horizon=horizon,
                     channel_set=channel_set,
-                    val_metrics=artifacts.val_metrics,
-                    test_metrics=artifacts.test_metrics,
-                    val_threshold=artifacts.val_threshold,
-                    n_params=artifacts.n_params,
-                    train_seconds=artifacts.train_seconds,
-                    n_features=int(slice_view(data.X_train, channel_set, horizon).shape[-1]),
-                    epochs_run=len(artifacts.history),
+                    epochs=args.epochs,
+                    batch_size=args.batch_size,
+                    lr=args.lr,
+                    weight_decay=args.weight_decay,
+                    grad_clip=args.grad_clip,
+                    early_stop_patience=args.early_stop_patience,
+                    use_sampler=args.use_sampler,
+                    use_pos_weight=not args.no_pos_weight,
+                    monitor=args.monitor,
+                    lstm_hidden=args.lstm_hidden,
+                    lstm_layers=args.lstm_layers,
+                    conv_channels=tuple(args.conv_channels),
+                    kernel_sizes=tuple(args.kernel_sizes),
+                    dilations=tuple(args.dilations),
+                    dropout=args.dropout,
+                    head_hidden=args.head_hidden,
+                    static_mode=static_mode,
+                    static_hidden=args.static_hidden,
+                    static_dropout=args.static_dropout,
+                    seed=args.seed,
+                    device=args.device,
                 )
-            )
 
-            elapsed = time.time() - run_started
-            avg_per_exp = elapsed / counter
-            eta = avg_per_exp * (total - counter)
+                try:
+                    artifacts = train_one_experiment(data=data, config=tcfg, out_dir=exp_dir)
+                except Exception as exc:
+                    logger.exception("Experiment %s failed: %s", exp_id, exc)
+                    continue
 
-            logger.info(
-                "  -> %s | test AUROC=%.4f AUPRC=%.4f F1=%.4f sens=%.4f spec=%.4f thr=%.3f | trained_in=%s",
-                exp_id,
-                artifacts.test_metrics["auroc"],
-                artifacts.test_metrics["auprc"],
-                artifacts.test_metrics["f1"],
-                artifacts.test_metrics["recall_sensitivity"],
-                artifacts.test_metrics["specificity"],
-                artifacts.val_threshold,
-                format_duration(artifacts.train_seconds),
-            )
-            logger.info(
-                "  progress | done=%d/%d | elapsed=%s | avg/exp=%s | eta=%s",
-                counter, total,
-                format_duration(elapsed),
-                format_duration(avg_per_exp),
-                format_duration(eta),
-            )
+                torch.save(
+                    {
+                        "state_dict": artifacts.best_state_dict,
+                        "config": config_serialised,
+                        "experiment": {
+                            "horizon": horizon,
+                            "channel_set": channel_set,
+                            "static_mode": static_mode,
+                            "in_channels": artifacts.n_dynamic_channels,
+                            "static_dim": artifacts.static_dim,
+                            "static_feature_names": data.static_feature_names,
+                            "static_hidden": args.static_hidden,
+                            "static_dropout": args.static_dropout,
+                        },
+                        "threshold_modes": threshold_modes,
+                        "min_sensitivity": args.min_sensitivity,
+                        "min_specificity": args.min_specificity,
+                        "fixed_threshold": args.fixed_threshold,
+                        "val_threshold_max_f1": artifacts.val_threshold,
+                        "val_metrics_max_f1": artifacts.val_metrics,
+                        "test_metrics_max_f1": artifacts.test_metrics,
+                    },
+                    exp_dir / "best_model.pt",
+                )
+
+                history_df = pd.DataFrame(artifacts.history)
+                history_df.to_csv(exp_dir / "training_history.csv", index=False)
+
+                # Build predictions.csv with one row per (split, admission, threshold_mode)
+                pred_rows: list[dict[str, Any]] = []
+                for thr_mode in threshold_modes:
+                    t_sel, obj_val, fallback = select_threshold(
+                        data.y_val, artifacts.val_predictions,
+                        mode=thr_mode,
+                        min_sensitivity=args.min_sensitivity,
+                        min_specificity=args.min_specificity,
+                        fixed_threshold=args.fixed_threshold,
+                    )
+                    for split_name, hadm_ids, subject_ids, y_true, y_score in [
+                        ("val", data.val_hadm_ids, data.val_subject_ids, data.y_val, artifacts.val_predictions),
+                        ("test", data.test_hadm_ids, data.test_subject_ids, data.y_test, artifacts.test_predictions),
+                    ]:
+                        preds = (y_score >= t_sel).astype(int)
+                        for hadm, subj, yt, ys, p in zip(hadm_ids, subject_ids, y_true, y_score, preds):
+                            pred_rows.append({
+                                "split": split_name,
+                                "hadm_id": int(hadm),
+                                "subject_id": int(subj),
+                                "static_mode": static_mode,
+                                "threshold_mode": thr_mode,
+                                "y_true": int(yt),
+                                "y_score": float(ys),
+                                "y_pred": int(p),
+                                "threshold": float(t_sel),
+                                "threshold_fallback": fallback,
+                            })
+                pd.DataFrame(pred_rows).to_csv(exp_dir / "predictions.csv", index=False)
+
+                # Per-experiment plots use the default max_f1 threshold for display
+                if not args.no_plots:
+                    plots_dir = exp_dir / "plots"
+                    plot_training_history(artifacts.history, plots_dir)
+                    plot_test_curves(
+                        data.y_test, artifacts.test_predictions, artifacts.val_threshold, plots_dir,
+                    )
+                    plot_attention_examples(
+                        data.y_test, artifacts.test_predictions, artifacts.val_threshold,
+                        artifacts.test_attention, plots_dir, horizon=horizon, title_prefix="Test",
+                    )
+
+                # One ExperimentRecord per threshold mode
+                for thr_mode in threshold_modes:
+                    t_sel, obj_val, fallback = select_threshold(
+                        data.y_val, artifacts.val_predictions,
+                        mode=thr_mode,
+                        min_sensitivity=args.min_sensitivity,
+                        min_specificity=args.min_specificity,
+                        fixed_threshold=args.fixed_threshold,
+                    )
+                    val_metrics_thr = compute_metrics(data.y_val, artifacts.val_predictions, t_sel)
+                    test_metrics_thr = compute_metrics(data.y_test, artifacts.test_predictions, t_sel)
+                    records.append(
+                        ExperimentRecord(
+                            horizon=horizon,
+                            channel_set=channel_set,
+                            static_mode=static_mode,
+                            uses_static=(static_mode == "static"),
+                            static_dim=artifacts.static_dim,
+                            n_dynamic_channels=artifacts.n_dynamic_channels,
+                            val_metrics=val_metrics_thr,
+                            test_metrics=test_metrics_thr,
+                            val_threshold=t_sel,
+                            threshold_mode=thr_mode,
+                            threshold_objective_value=float(obj_val),
+                            threshold_fallback=fallback,
+                            min_sensitivity=args.min_sensitivity,
+                            min_specificity=args.min_specificity,
+                            n_params=artifacts.n_params,
+                            train_seconds=artifacts.train_seconds,
+                            n_features=artifacts.total_input_features,
+                            epochs_run=len(artifacts.history),
+                        )
+                    )
+
+                elapsed = time.time() - run_started
+                avg_per_exp = elapsed / counter
+                eta = avg_per_exp * (total - counter)
+
+                logger.info(
+                    "  -> %s | trained_in=%s | %d threshold mode(s)",
+                    exp_id,
+                    format_duration(artifacts.train_seconds),
+                    len(threshold_modes),
+                )
+                for rec in records[-len(threshold_modes):]:
+                    fallback_tag = " [FALLBACK]" if rec.threshold_fallback else ""
+                    logger.info(
+                        "     [%s] test AUROC=%.4f AUPRC=%.4f F1=%.4f sens=%.4f spec=%.4f thr=%.3f%s",
+                        rec.threshold_mode,
+                        rec.test_metrics["auroc"],
+                        rec.test_metrics["auprc"],
+                        rec.test_metrics["f1"],
+                        rec.test_metrics["recall_sensitivity"],
+                        rec.test_metrics["specificity"],
+                        rec.val_threshold,
+                        fallback_tag,
+                    )
+                logger.info(
+                    "  progress | done=%d/%d | elapsed=%s | avg/exp=%s | eta=%s",
+                    counter, total,
+                    format_duration(elapsed),
+                    format_duration(avg_per_exp),
+                    format_duration(eta),
+                )
 
     if not records:
         raise SystemExit("No CNN-BiLSTM experiments produced results")
 
     df = pd.DataFrame([r.to_row() for r in records]).sort_values(
-        by=["horizon", "channel_set", "test_auprc"], ascending=[True, True, False],
+        by=["horizon", "channel_set", "static_mode", "threshold_mode", "test_auprc"],
+        ascending=[True, True, True, True, False],
     ).reset_index(drop=True)
     df.to_csv(out_dir / "cnn_bilstm_results.csv", index=False)
     write_markdown_report(df, out_dir / "cnn_bilstm_results.md")
@@ -1338,9 +1651,10 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("Top 5 by test AUPRC:")
     top = df.sort_values("test_auprc", ascending=False).head(5)
     for _, row in top.iterrows():
+        thr_mode = row.get("threshold_mode", "max_f1")
         logger.info(
-            "  h=%2d | %-12s | AUROC=%.3f AUPRC=%.3f F1=%.3f sens=%.3f spec=%.3f | epochs=%d | params=%s",
-            int(row.horizon), row.channel_set,
+            "  h=%2d | %-12s | static=%-6s | thr=%-28s | AUROC=%.3f AUPRC=%.3f F1=%.3f sens=%.3f spec=%.3f | epochs=%d | params=%s",
+            int(row.horizon), row.channel_set, row.static_mode, thr_mode,
             row.test_auroc, row.test_auprc, row.test_f1,
             row.test_recall_sensitivity, row.test_specificity,
             int(row.epochs_run), human_int(int(row.n_params)),

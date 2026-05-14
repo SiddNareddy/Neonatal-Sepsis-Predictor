@@ -1,13 +1,32 @@
 # Neonatal Sepsis Prediction
 
-This project builds and evaluates models for predicting neonatal sepsis from MIMIC-III physiological time-series data. The workflow creates a cleaned admission-level tensor, evaluates classical baseline models across different observation windows, trains a CNN-BiLSTM model, and combines results into a unified report.
+This project aims to build a model that can accurately predict **neonatal sepsis** from **sparse physiological time-series data**. It uses neonatal cohorts and charted vitals from **MIMIC-III**, combining classical baselines with a **hybrid CNN–BDLSTM** (bidirectional LSTM) architecture that fuses learned temporal representations with optional static patient features.
 
-## Key Files
+## Repository contents
 
-- `code/Admission Sepsis Prediction.ipynb` creates the neonatal sepsis/control cohort, extracts and cleans vital-sign chart events, builds the 24-hour admission-level tensor, and saves the processed train/validation/test dataset. It also performs basic cohort and data-density checks.
+- **`Admission Sepsis Prediction.ipynb`** — Cleans and processes MIMIC-III data for the neonatal sepsis prediction task: cohort definition, vital extraction and quality control, and export of the admission-level tensor dataset. It prepares both **dynamic (time-series)** signals and **static** tabular features used downstream.
 
-- `code/run_baselines.py` trains classical baseline models such as logistic regression, random forests, extra trees, gradient boosting, and MLPs across multiple time horizons and channel-set ablations. It saves metrics, predictions, tables, and plots for comparing baseline performance.
+- **`run_baselines.py`** — Runs **baseline machine learning models** (e.g. logistic regression, tree ensembles, gradient boosting, MLPs) on the processed tensor. Experiments sweep observation windows and input ablations; outputs include metrics, predictions, and diagnostic plots (see the script docstring for defaults and paths).
 
-- `code/train_cnn_bilstm.py` trains the CNN-Attention-BiLSTM model on the processed tensor for the same time horizons and channel sets. It uses weighted loss, early stopping, validation threshold selection, checkpoints, predictions, and training/metric visualizations.
+- **`train_cnn_bilstm.py`** — Trains the **CNN–Attention–BiLSTM** model on the same artifact: dilated temporal convolutions, a temporal attention gate, stacked bidirectional LSTM layers, attention pooling combined with final hidden states, optional static fusion, and a classifier head. Checkpoints, training histories, and evaluation plots are written under the chosen output directory.
 
-- `code/unified_results_report.py` combines the baseline and CNN-BiLSTM result files into one unified summary. It generates clean comparison tables, combined plots, and a one-page Markdown/HTML report under `results/unified_summary/`.
+- **`results/static_threshold_selection/`** — **Results** from threshold-selection experiments for both baselines and the CNN-BiLSTM runs (config logs, per-experiment folders with `training_history.csv` / `predictions.csv` where applicable, and aggregated summaries such as `cnn_bilstm_results.*` under the CNN subfolder). Full end-to-end result trees may be generated locally when re-running the scripts.
+
+## Model architecture
+
+The hybrid model ingests dynamic input \(X \in \mathbb{R}^{B \times T \times C}\) (batch, time, channels) through feature dropout, two dilated temporal convolution blocks with residual connections, a temporal attention gate, a 2-layer BiLSTM, and a dual-branch aggregation (attention pooling plus last forward/backward states). Optional static features are embedded and fused with the dynamic summary before the final MLP classifier, which produces a single sepsis logit.
+
+![Hybrid CNN–BDLSTM architecture](assets/architecture.png)
+
+## Model Performance (6hr horizon)
+
+The plots below summarize **test** discrimination for the CNN-BiLSTM at the **6-hour** observation window. **AUPRC** summarizes precision–recall trade-offs while **AUROC** summarizes the ROC curve.
+
+| Metric | Value (from plots) |
+|--------|----------------------|
+| AUPRC | **0.847** |
+| AUROC | **0.777** |
+
+![Test precision–recall curve (AUPRC = 0.847)](assets/auprc_cnnbdlstm_6hr.png)
+
+![Test ROC curve (AUROC = 0.777)](assets/auroc_cnnbdlstm_6hr.png)

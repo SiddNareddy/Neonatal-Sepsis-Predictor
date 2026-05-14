@@ -75,10 +75,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils.class_weight import compute_sample_weight
 
-# ---------------------------------------------------------------------------
-# Constants and configuration
-# ---------------------------------------------------------------------------
-
 NUM_VITAL_CHANNELS = 5
 NUM_OBSERVED_MASK_CHANNELS = 5
 NUM_SOURCE_MASK_CHANNELS = 8
@@ -115,12 +111,6 @@ def human_int(value: int) -> str:
     """Render an integer with thousands separators."""
     return f"{int(value):,}"
 
-
-# ---------------------------------------------------------------------------
-# Data loading and validation
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class SepsisData:
     """Container for the loaded `.npz` dataset."""
@@ -131,7 +121,7 @@ class SepsisData:
     y_val: np.ndarray
     X_test: np.ndarray
     y_test: np.ndarray
-    norm_params: np.ndarray
+    norm_params: np.ndarray | None
     channel_names: list[str]
     label_names: list[str]
     train_hadm_ids: np.ndarray
@@ -140,9 +130,14 @@ class SepsisData:
     train_subject_ids: np.ndarray
     val_subject_ids: np.ndarray
     test_subject_ids: np.ndarray
+    X_static_train: np.ndarray | None = None
+    X_static_val: np.ndarray | None = None
+    X_static_test: np.ndarray | None = None
+    static_feature_names: list[str] = field(default_factory=list)
     horizon_max: int = 24
 
     def summary(self) -> dict[str, Any]:
+        has_static = self.X_static_train is not None
         return {
             "channel_names": self.channel_names,
             "label_names": self.label_names,
@@ -158,6 +153,8 @@ class SepsisData:
             },
             "horizon_max": self.horizon_max,
             "n_channels": self.X_train.shape[-1],
+            "has_static_features": has_static,
+            "n_static_features": int(self.X_static_train.shape[1]) if has_static else 0,
         }
 
 
@@ -173,13 +170,34 @@ def load_data(npz_path: Path) -> SepsisData:
         "X_train", "y_train",
         "X_val", "y_val",
         "X_test", "y_test",
-        "norm_params", "channel_names", "label_names",
+        "channel_names", "label_names",
         "train_hadm_ids", "val_hadm_ids", "test_hadm_ids",
         "train_subject_ids", "val_subject_ids", "test_subject_ids",
     ]
     missing = [k for k in required if k not in raw.files]
     if missing:
         raise KeyError(f"Missing keys in {npz_path}: {missing}")
+
+    static_arrays: dict[str, np.ndarray | None] = {
+        "X_static_train": None,
+        "X_static_val": None,
+        "X_static_test": None,
+    }
+    static_feature_names: list[str] = []
+    has_all_static = all(
+        k in raw.files for k in ("X_static_train", "X_static_val", "X_static_test")
+    )
+    if has_all_static:
+        static_arrays = {
+            "X_static_train": raw["X_static_train"].astype(np.float32),
+            "X_static_val": raw["X_static_val"].astype(np.float32),
+            "X_static_test": raw["X_static_test"].astype(np.float32),
+        }
+        if "static_feature_names" in raw.files:
+            static_feature_names = [str(s) for s in raw["static_feature_names"].tolist()]
+        else:
+            static_dim = int(static_arrays["X_static_train"].shape[1])
+            static_feature_names = [f"static_{i}" for i in range(static_dim)]
 
     data = SepsisData(
         X_train=raw["X_train"].astype(np.float32),
@@ -188,7 +206,7 @@ def load_data(npz_path: Path) -> SepsisData:
         y_val=raw["y_val"].astype(np.int64),
         X_test=raw["X_test"].astype(np.float32),
         y_test=raw["y_test"].astype(np.int64),
-        norm_params=raw["norm_params"],
+        norm_params=raw["norm_params"] if "norm_params" in raw.files else None,
         channel_names=[str(s) for s in raw["channel_names"].tolist()],
         label_names=[str(s) for s in raw["label_names"].tolist()],
         train_hadm_ids=raw["train_hadm_ids"],
@@ -197,6 +215,10 @@ def load_data(npz_path: Path) -> SepsisData:
         train_subject_ids=raw["train_subject_ids"],
         val_subject_ids=raw["val_subject_ids"],
         test_subject_ids=raw["test_subject_ids"],
+        X_static_train=static_arrays["X_static_train"],
+        X_static_val=static_arrays["X_static_val"],
+        X_static_test=static_arrays["X_static_test"],
+        static_feature_names=static_feature_names,
         horizon_max=int(raw["X_train"].shape[1]),
     )
 
@@ -215,13 +237,34 @@ def load_data(npz_path: Path) -> SepsisData:
                 f"channel_names length {len(data.channel_names)}"
             )
 
+    if data.X_static_train is not None:
+        for split_name, s_arr, y_arr in [
+            ("train", data.X_static_train, data.y_train),
+            ("val", data.X_static_val, data.y_val),
+            ("test", data.X_static_test, data.y_test),
+        ]:
+            if s_arr is None:
+                raise ValueError("Static arrays must be present for all splits if provided")
+            if np.isnan(s_arr).any():
+                raise ValueError(f"X_static_{split_name} contains NaN values")
+            if np.isinf(s_arr).any():
+                raise ValueError(f"X_static_{split_name} contains inf values")
+            if s_arr.ndim != 2:
+                raise ValueError(f"X_static_{split_name} must be 2D; got shape {s_arr.shape}")
+            if s_arr.shape[0] != y_arr.shape[0]:
+                raise ValueError(
+                    f"X_static_{split_name} rows {s_arr.shape[0]} do not match y_{split_name} rows {y_arr.shape[0]}"
+                )
+        static_dim = int(data.X_static_train.shape[1])
+        if int(data.X_static_val.shape[1]) != static_dim or int(data.X_static_test.shape[1]) != static_dim:
+            raise ValueError("Static feature dimensions mismatch across splits")
+        if data.static_feature_names and len(data.static_feature_names) != static_dim:
+            raise ValueError(
+                "static_feature_names length mismatch static dim: "
+                f"{len(data.static_feature_names)} != {static_dim}"
+            )
+
     return data
-
-
-# ---------------------------------------------------------------------------
-# Feature engineering
-# ---------------------------------------------------------------------------
-
 
 def _slice_channel_set(X: np.ndarray, channel_set: str, horizon: int) -> np.ndarray:
     """Return tensor prefix sliced to the configured horizon and channels."""
@@ -267,12 +310,6 @@ def build_tabular_features(X: np.ndarray) -> np.ndarray:
         axis=1,
     )
     return np.concatenate([summary, flat], axis=1)
-
-
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
-
 
 def make_models(seed: int, quick: bool = False) -> dict[str, Any]:
     """Instantiate baseline classifiers, all imbalance-aware where possible."""
@@ -373,24 +410,112 @@ def predict_proba(model: Any, X: np.ndarray) -> np.ndarray:
         return 1.0 / (1.0 + np.exp(-scores))
     raise AttributeError("Model has neither predict_proba nor decision_function")
 
+THRESHOLD_MODES = (
+    "max_f1",
+    "max_balanced_accuracy",
+    "sensitivity_at_specificity",
+    "specificity_at_sensitivity",
+    "fixed",
+)
 
-# ---------------------------------------------------------------------------
-# Metrics and threshold tuning
-# ---------------------------------------------------------------------------
+
+def candidate_thresholds(y_score: np.ndarray) -> np.ndarray:
+    """Build stable threshold candidates: all unique validation scores + 0.5."""
+    return np.sort(np.union1d(np.unique(y_score), [0.5]))
+
+
+def _sweep_metrics(y_true: np.ndarray, y_score: np.ndarray) -> list[dict[str, float]]:
+    """Compute sens/spec/balanced-accuracy/F1 at every candidate threshold."""
+    thrs = candidate_thresholds(y_score)
+    eps = 1e-12
+    rows: list[dict[str, float]] = []
+    for t in thrs:
+        preds = (y_score >= t).astype(int)
+        tp = float(((preds == 1) & (y_true == 1)).sum())
+        fp = float(((preds == 1) & (y_true == 0)).sum())
+        tn = float(((preds == 0) & (y_true == 0)).sum())
+        fn = float(((preds == 0) & (y_true == 1)).sum())
+        sens = tp / (tp + fn + eps)
+        spec = tn / (tn + fp + eps)
+        ba = (sens + spec) / 2
+        prec_v = tp / (tp + fp + eps)
+        f1 = 2 * prec_v * sens / (prec_v + sens + eps)
+        rows.append({
+            "threshold": float(t),
+            "sensitivity": float(sens),
+            "specificity": float(spec),
+            "balanced_accuracy": float(ba),
+            "f1": float(f1),
+        })
+    return rows
+
+
+def select_threshold(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    mode: str,
+    min_sensitivity: float = 0.90,
+    min_specificity: float = 0.70,
+    fixed_threshold: float = 0.5,
+) -> tuple[float, float, bool]:
+    """Select a decision threshold on *validation* data using the given mode.
+
+    Returns
+    -------
+    (selected_threshold, objective_value, threshold_fallback)
+        objective_value is the primary optimised quantity at the selected threshold
+        (NaN for ``fixed`` mode).
+        threshold_fallback is True when a constrained mode found no feasible
+        threshold and fell back to max balanced accuracy.
+    """
+    if mode == "fixed":
+        return float(fixed_threshold), float("nan"), False
+
+    sweep = _sweep_metrics(y_true, y_score)
+    if not sweep:
+        return 0.5, 0.0, False
+
+    if mode == "max_f1":
+        best = max(sweep, key=lambda r: (r["f1"], r["balanced_accuracy"]))
+        return best["threshold"], best["f1"], False
+
+    if mode == "max_balanced_accuracy":
+        best = max(sweep, key=lambda r: (r["balanced_accuracy"], r["f1"]))
+        return best["threshold"], best["balanced_accuracy"], False
+
+    if mode == "sensitivity_at_specificity":
+        valid = [r for r in sweep if r["specificity"] >= min_specificity - 1e-9]
+        if not valid:
+            logger.warning(
+                "select_threshold: no threshold satisfies specificity>=%.2f "
+                "(mode=%s); falling back to max_balanced_accuracy",
+                min_specificity, mode,
+            )
+            best = max(sweep, key=lambda r: (r["balanced_accuracy"], r["f1"]))
+            return best["threshold"], best["balanced_accuracy"], True
+        best = max(valid, key=lambda r: (r["sensitivity"], r["balanced_accuracy"], r["f1"]))
+        return best["threshold"], best["sensitivity"], False
+
+    if mode == "specificity_at_sensitivity":
+        valid = [r for r in sweep if r["sensitivity"] >= min_sensitivity - 1e-9]
+        if not valid:
+            logger.warning(
+                "select_threshold: no threshold satisfies sensitivity>=%.2f "
+                "(mode=%s); falling back to max_balanced_accuracy",
+                min_sensitivity, mode,
+            )
+            best = max(sweep, key=lambda r: (r["balanced_accuracy"], r["f1"]))
+            return best["threshold"], best["balanced_accuracy"], True
+        best = max(valid, key=lambda r: (r["specificity"], r["balanced_accuracy"], r["f1"]))
+        return best["threshold"], best["specificity"], False
+
+    raise ValueError(f"Unknown threshold mode: {mode!r}. Must be one of {THRESHOLD_MODES}")
 
 
 def tune_threshold(y_true: np.ndarray, y_score: np.ndarray) -> tuple[float, float]:
-    """Pick the threshold that maximises F1 on the validation set."""
-
-    precision, recall, thresholds = precision_recall_curve(y_true, y_score)
-    if thresholds.size == 0:
-        return 0.5, 0.0
-
-    eps = 1e-12
-    f1 = 2 * precision[:-1] * recall[:-1] / (precision[:-1] + recall[:-1] + eps)
-    best_idx = int(np.nanargmax(f1))
-    return float(thresholds[best_idx]), float(f1[best_idx])
-
+    """Backward-compatible wrapper: max-F1 threshold selection."""
+    t, obj, _ = select_threshold(y_true, y_score, mode="max_f1")
+    return t, obj
 
 def compute_metrics(
     y_true: np.ndarray,
@@ -425,23 +550,26 @@ def compute_metrics(
     }
     return metrics
 
-
-# ---------------------------------------------------------------------------
-# Experiment orchestration
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class ExperimentResult:
     horizon: int
     channel_set: str
+    static_mode: str
+    uses_static: bool
+    static_dim: int
     model_name: str
     train_seconds: float
+    n_dynamic_features: int
     n_features: int
     val_threshold: float
     feature_seconds: float = 0.0
     predict_seconds: float = 0.0
     total_seconds: float = 0.0
+    threshold_mode: str = "max_f1"
+    threshold_objective_value: float = 0.0
+    threshold_fallback: bool = False
+    min_sensitivity: float = 0.90
+    min_specificity: float = 0.70
     val_metrics: dict[str, float] = field(default_factory=dict)
     test_metrics: dict[str, float] = field(default_factory=dict)
 
@@ -449,11 +577,21 @@ class ExperimentResult:
         row: dict[str, Any] = {
             "horizon": self.horizon,
             "channel_set": self.channel_set,
+            "static_mode": self.static_mode,
+            "uses_static": self.uses_static,
+            "static_dim": self.static_dim,
             "model": self.model_name,
+            "threshold_mode": self.threshold_mode,
+            "selected_threshold": round(self.val_threshold, 4),
+            "threshold_objective_value": round(self.threshold_objective_value, 6) if not (self.threshold_objective_value != self.threshold_objective_value) else float("nan"),
+            "threshold_fallback": self.threshold_fallback,
+            "min_sensitivity": round(self.min_sensitivity, 4),
+            "min_specificity": round(self.min_specificity, 4),
             "train_seconds": round(self.train_seconds, 3),
             "feature_seconds": round(self.feature_seconds, 3),
             "predict_seconds": round(self.predict_seconds, 3),
             "total_seconds": round(self.total_seconds, 3),
+            "n_dynamic_features": self.n_dynamic_features,
             "n_features": self.n_features,
             "val_threshold": round(self.val_threshold, 4),
         }
@@ -470,19 +608,38 @@ def run_single_experiment(
     model_name: str,
     model: Any,
     out_dir: Path,
+    static_mode: str,
+    threshold_modes: list[str],
+    min_sensitivity: float = 0.90,
+    min_specificity: float = 0.70,
+    fixed_threshold: float = 0.5,
     save_predictions: bool = True,
-) -> ExperimentResult:
+) -> list[ExperimentResult]:
+    """Fit one model and evaluate it under every requested threshold mode.
+
+    Returns one ``ExperimentResult`` per threshold mode without retraining.
+    """
     exp_start = time.time()
 
     feat_start = time.time()
     X_tr = build_tabular_features(_slice_channel_set(data.X_train, channel_set, horizon))
     X_va = build_tabular_features(_slice_channel_set(data.X_val, channel_set, horizon))
     X_te = build_tabular_features(_slice_channel_set(data.X_test, channel_set, horizon))
+    n_dynamic_features = int(X_tr.shape[1])
+    static_dim = 0
+    if static_mode == "static":
+        if data.X_static_train is None or data.X_static_val is None or data.X_static_test is None:
+            raise ValueError("static_mode='static' requested but static arrays are missing in dataset")
+        static_dim = int(data.X_static_train.shape[1])
+        X_tr = np.concatenate([X_tr, data.X_static_train], axis=1)
+        X_va = np.concatenate([X_va, data.X_static_val], axis=1)
+        X_te = np.concatenate([X_te, data.X_static_test], axis=1)
     feature_seconds = time.time() - feat_start
 
     logger.info(
-        "  features: train=%s val=%s test=%s | dim=%s | feat_time=%.2fs",
-        X_tr.shape, X_va.shape, X_te.shape, human_int(X_tr.shape[1]), feature_seconds,
+        "  features: mode=%s train=%s val=%s test=%s | dynamic_dim=%s static_dim=%s total_dim=%s | feat_time=%.2fs",
+        static_mode, X_tr.shape, X_va.shape, X_te.shape,
+        human_int(n_dynamic_features), human_int(static_dim), human_int(X_tr.shape[1]), feature_seconds,
     )
 
     fit_start = time.time()
@@ -494,63 +651,80 @@ def run_single_experiment(
     test_score = predict_proba(model, X_te)
     predict_seconds = time.time() - pred_start
 
-    threshold, _ = tune_threshold(data.y_val, val_score)
-    val_metrics = compute_metrics(data.y_val, val_score, threshold)
-    test_metrics = compute_metrics(data.y_test, test_score, threshold)
-
     total_seconds = time.time() - exp_start
 
-    result = ExperimentResult(
-        horizon=horizon,
-        channel_set=channel_set,
-        model_name=model_name,
-        train_seconds=train_seconds,
-        feature_seconds=feature_seconds,
-        predict_seconds=predict_seconds,
-        total_seconds=total_seconds,
-        n_features=int(X_tr.shape[1]),
-        val_threshold=threshold,
-        val_metrics=val_metrics,
-        test_metrics=test_metrics,
-    )
-
+    pred_dir = out_dir / "predictions"
     if save_predictions:
-        exp_id = f"h{horizon:02d}__{channel_set}__{model_name}"
-        pred_dir = out_dir / "predictions"
         pred_dir.mkdir(parents=True, exist_ok=True)
-        rows = []
-        for split_name, hadm_ids, subject_ids, y_true, y_score in [
-            ("val", data.val_hadm_ids, data.val_subject_ids, data.y_val, val_score),
-            ("test", data.test_hadm_ids, data.test_subject_ids, data.y_test, test_score),
-        ]:
-            preds = (y_score >= threshold).astype(int)
-            for hadm, subj, yt, ys, p in zip(hadm_ids, subject_ids, y_true, y_score, preds):
-                rows.append(
-                    {
+
+    exp_results: list[ExperimentResult] = []
+    for thr_mode in threshold_modes:
+        threshold, obj_val, fallback = select_threshold(
+            data.y_val, val_score,
+            mode=thr_mode,
+            min_sensitivity=min_sensitivity,
+            min_specificity=min_specificity,
+            fixed_threshold=fixed_threshold,
+        )
+        val_metrics = compute_metrics(data.y_val, val_score, threshold)
+        test_metrics = compute_metrics(data.y_test, test_score, threshold)
+
+        result = ExperimentResult(
+            horizon=horizon,
+            channel_set=channel_set,
+            static_mode=static_mode,
+            uses_static=(static_mode == "static"),
+            static_dim=static_dim,
+            model_name=model_name,
+            train_seconds=train_seconds,
+            feature_seconds=feature_seconds,
+            predict_seconds=predict_seconds,
+            total_seconds=total_seconds,
+            n_dynamic_features=n_dynamic_features,
+            n_features=int(X_tr.shape[1]),
+            val_threshold=threshold,
+            threshold_mode=thr_mode,
+            threshold_objective_value=float(obj_val),
+            threshold_fallback=fallback,
+            min_sensitivity=min_sensitivity,
+            min_specificity=min_specificity,
+            val_metrics=val_metrics,
+            test_metrics=test_metrics,
+        )
+        exp_results.append(result)
+
+        if save_predictions:
+            exp_id = (
+                f"h{horizon:02d}__{channel_set}__static_{static_mode}"
+                f"__thr_{thr_mode}__{model_name}"
+            )
+            rows = []
+            for split_name, hadm_ids, subject_ids, y_true, y_sc in [
+                ("val", data.val_hadm_ids, data.val_subject_ids, data.y_val, val_score),
+                ("test", data.test_hadm_ids, data.test_subject_ids, data.y_test, test_score),
+            ]:
+                preds = (y_sc >= threshold).astype(int)
+                for hadm, subj, yt, ys, p in zip(hadm_ids, subject_ids, y_true, y_sc, preds):
+                    rows.append({
                         "split": split_name,
                         "hadm_id": int(hadm),
                         "subject_id": int(subj),
+                        "static_mode": static_mode,
+                        "threshold_mode": thr_mode,
                         "y_true": int(yt),
                         "y_score": float(ys),
                         "y_pred": int(p),
                         "threshold": float(threshold),
-                    }
-                )
-        pd.DataFrame(rows).to_csv(pred_dir / f"{exp_id}.csv", index=False)
+                    })
+            pd.DataFrame(rows).to_csv(pred_dir / f"{exp_id}.csv", index=False)
 
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Reporting: tables and plots
-# ---------------------------------------------------------------------------
-
+    return exp_results
 
 def results_to_dataframe(results: list[ExperimentResult]) -> pd.DataFrame:
     df = pd.DataFrame([r.to_row() for r in results])
     df = df.sort_values(
-        by=["horizon", "channel_set", "test_auprc", "test_auroc"],
-        ascending=[True, True, False, False],
+        by=["horizon", "channel_set", "static_mode", "threshold_mode", "test_auprc", "test_auroc"],
+        ascending=[True, True, True, True, False, False],
     ).reset_index(drop=True)
     return df
 
@@ -559,7 +733,7 @@ def write_markdown_report(df: pd.DataFrame, out_path: Path) -> None:
     """Write a human-friendly markdown report grouped by horizon and channel set."""
 
     cols = [
-        "model",
+        "model", "static_mode", "threshold_mode",
         "test_auroc",
         "test_auprc",
         "test_balanced_accuracy",
@@ -567,9 +741,15 @@ def write_markdown_report(df: pd.DataFrame, out_path: Path) -> None:
         "test_specificity",
         "test_f1",
         "test_brier",
-        "val_threshold",
+        "selected_threshold",
+        "threshold_objective_value",
+        "threshold_fallback",
+        "static_dim",
+        "n_dynamic_features",
+        "n_features",
         "train_seconds",
     ]
+    cols = [c for c in cols if c in df.columns]
 
     lines: list[str] = ["# Baseline Results", ""]
 
@@ -605,22 +785,27 @@ def _format_md_table(df: pd.DataFrame) -> str:
 
 
 def write_html_report(df: pd.DataFrame, out_path: Path) -> None:
-    cols = [
-        "horizon", "channel_set", "model",
+    base_cols = [
+        "horizon", "channel_set", "static_mode", "model",
+        "threshold_mode", "selected_threshold", "threshold_fallback",
         "test_auroc", "test_auprc",
         "test_balanced_accuracy", "test_recall_sensitivity",
         "test_specificity", "test_f1", "test_brier",
-        "val_threshold", "train_seconds",
+        "static_dim", "n_dynamic_features", "n_features", "train_seconds",
     ]
+    cols = [c for c in base_cols if c in df.columns]
+    fmt = {
+        "test_auroc": "{:.4f}", "test_auprc": "{:.4f}",
+        "test_balanced_accuracy": "{:.4f}",
+        "test_recall_sensitivity": "{:.4f}", "test_specificity": "{:.4f}",
+        "test_f1": "{:.4f}", "test_brier": "{:.4f}",
+        "train_seconds": "{:.2f}",
+    }
+    if "selected_threshold" in cols:
+        fmt["selected_threshold"] = "{:.4f}"
     styled = (
         df[cols]
-        .style.format({
-            "test_auroc": "{:.4f}", "test_auprc": "{:.4f}",
-            "test_balanced_accuracy": "{:.4f}",
-            "test_recall_sensitivity": "{:.4f}", "test_specificity": "{:.4f}",
-            "test_f1": "{:.4f}", "test_brier": "{:.4f}",
-            "val_threshold": "{:.4f}", "train_seconds": "{:.2f}",
-        })
+        .style.format(fmt)
         .background_gradient(subset=["test_auroc", "test_auprc"], cmap="Greens")
         .set_caption("Neonatal sepsis baselines — test set metrics")
         .set_table_styles([
@@ -640,6 +825,11 @@ def _save_fig(fig: plt.Figure, out_dir: Path, name: str) -> None:
 
 def plot_metric_grid(df: pd.DataFrame, plots_dir: Path) -> None:
     sns.set_style("whitegrid")
+    df = df.copy()
+    df["model_ablation"] = (
+        df["model"].astype(str) + " | " + df["static_mode"].astype(str)
+        + " | " + df.get("threshold_mode", pd.Series("max_f1", index=df.index)).astype(str)
+    )
 
     metrics_to_plot = [
         ("test_auroc", "Test AUROC"),
@@ -658,7 +848,7 @@ def plot_metric_grid(df: pd.DataFrame, plots_dir: Path) -> None:
             fig, ax = plt.subplots(figsize=(9, 5))
             sns.barplot(
                 data=sub,
-                x="horizon", y=metric, hue="model", ax=ax,
+                x="horizon", y=metric, hue="model_ablation", ax=ax,
             )
             ax.set_title(f"{title} by horizon — channel set: {channel_set}")
             ax.set_ylim(0, 1)
@@ -670,6 +860,11 @@ def plot_metric_grid(df: pd.DataFrame, plots_dir: Path) -> None:
 
 def plot_sens_spec_tradeoff(df: pd.DataFrame, plots_dir: Path) -> None:
     sns.set_style("whitegrid")
+    df = df.copy()
+    df["model_ablation"] = (
+        df["model"].astype(str) + " | " + df["static_mode"].astype(str)
+        + " | " + df.get("threshold_mode", pd.Series("max_f1", index=df.index)).astype(str)
+    )
     for channel_set in sorted(df["channel_set"].unique()):
         sub = df[df["channel_set"] == channel_set].copy()
         if sub.empty:
@@ -679,7 +874,7 @@ def plot_sens_spec_tradeoff(df: pd.DataFrame, plots_dir: Path) -> None:
             data=sub,
             x="test_specificity",
             y="test_recall_sensitivity",
-            hue="model",
+            hue="model_ablation",
             style="horizon",
             s=110,
             ax=ax,
@@ -696,16 +891,21 @@ def plot_sens_spec_tradeoff(df: pd.DataFrame, plots_dir: Path) -> None:
 
 def plot_ablation_heatmaps(df: pd.DataFrame, plots_dir: Path) -> None:
     sns.set_style("white")
+    df = df.copy()
+    df["ablation_cell"] = (
+        df["channel_set"].astype(str) + " | " + df["static_mode"].astype(str)
+        + " | " + df.get("threshold_mode", pd.Series("max_f1", index=df.index)).astype(str)
+    )
     for metric, title in [
         ("test_auroc", "Test AUROC"),
         ("test_auprc", "Test AUPRC"),
         ("test_f1", "Test F1"),
     ]:
         best = (
-            df.groupby(["horizon", "channel_set"])[metric]
+            df.groupby(["horizon", "ablation_cell"])[metric]
             .max()
             .reset_index()
-            .pivot(index="channel_set", columns="horizon", values=metric)
+            .pivot(index="ablation_cell", columns="horizon", values=metric)
         )
         if best.empty:
             continue
@@ -728,8 +928,16 @@ def plot_curves_for_top_models(
 ) -> None:
     sns.set_style("whitegrid")
 
+    thr_col = df.get("threshold_mode", pd.Series("max_f1", index=df.index))
+    preferred = "max_f1"
+    df_curves = df.copy()
+    df_curves["_thr_sort"] = (thr_col != preferred).astype(int)
     top_per_horizon = (
-        df.sort_values("test_auprc", ascending=False)
+        df_curves.sort_values(
+            by=["test_auprc", "test_auroc", "_thr_sort"],
+            ascending=[False, False, True],
+        )
+        .drop_duplicates(subset=["horizon", "channel_set", "static_mode", "model"])
         .groupby("horizon")
         .head(3)
     )
@@ -739,7 +947,8 @@ def plot_curves_for_top_models(
         fig_roc, ax_roc = plt.subplots(figsize=(7, 6))
         fig_pr, ax_pr = plt.subplots(figsize=(7, 6))
         for _, row in rows.iterrows():
-            exp_id = f"h{int(row.horizon):02d}__{row.channel_set}__{row.model}"
+            thr_mode = row.get("threshold_mode", "max_f1")
+            exp_id = f"h{int(row.horizon):02d}__{row.channel_set}__static_{row.static_mode}__thr_{thr_mode}__{row.model}"
             path = pred_dir / f"{exp_id}.csv"
             if not path.exists():
                 continue
@@ -751,12 +960,12 @@ def plot_curves_for_top_models(
             roc_auc = auc(fpr, tpr)
             ax_roc.plot(
                 fpr, tpr,
-                label=f"{row.model} ({row.channel_set}) — AUROC={roc_auc:.3f}",
+                label=f"{row.model} ({row.channel_set}, {row.static_mode}) — AUROC={roc_auc:.3f}",
             )
             prec, rec, _ = precision_recall_curve(test["y_true"], test["y_score"])
             ax_pr.plot(
                 rec, prec,
-                label=f"{row.model} ({row.channel_set}) — AP={row.test_auprc:.3f}",
+                label=f"{row.model} ({row.channel_set}, {row.static_mode}) — AP={row.test_auprc:.3f}",
             )
 
         ax_roc.plot([0, 1], [0, 1], "k--", alpha=0.4)
@@ -795,20 +1004,15 @@ def plot_confusion_matrices(df: pd.DataFrame, plots_dir: Path) -> None:
             yticklabels=["True: control", "True: sepsis"],
             cbar=False, ax=ax,
         )
+        thr_label = row.get("threshold_mode", "max_f1")
         ax.set_title(
-            f"Best @ h={int(row.horizon)} | {row.model} ({row.channel_set})\n"
+            f"Best @ h={int(row.horizon)} | {row.model} ({row.channel_set}, {row.static_mode}, {thr_label})\n"
             f"AUPRC={row.test_auprc:.3f}, AUROC={row.test_auroc:.3f}"
         )
         _save_fig(
             fig, plots_dir,
-            f"confmat_best_h{int(row.horizon):02d}_{row.channel_set}_{row.model}",
+            f"confmat_best_h{int(row.horizon):02d}_{row.channel_set}_{row.static_mode}_{thr_label}_{row.model}",
         )
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -862,6 +1066,43 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Skip writing per-admission prediction CSVs",
     )
+    parser.add_argument(
+        "--static-modes",
+        type=str,
+        nargs="+",
+        choices=["none", "static"],
+        default=["none"],
+        help="Ablation modes: none (dynamic tabular only), static (append static feature block).",
+    )
+    parser.add_argument(
+        "--threshold-modes",
+        type=str,
+        nargs="+",
+        choices=list(THRESHOLD_MODES),
+        default=["max_f1"],
+        help=(
+            "Threshold selection strategies to evaluate. One ExperimentResult row is produced "
+            "per mode without retraining. Default: max_f1 (preserves previous behaviour)."
+        ),
+    )
+    parser.add_argument(
+        "--min-specificity",
+        type=float,
+        default=0.70,
+        help="Minimum validation specificity for sensitivity_at_specificity mode.",
+    )
+    parser.add_argument(
+        "--min-sensitivity",
+        type=float,
+        default=0.90,
+        help="Minimum validation sensitivity for specificity_at_sensitivity mode.",
+    )
+    parser.add_argument(
+        "--fixed-threshold",
+        type=float,
+        default=0.5,
+        help="Decision threshold used for the 'fixed' mode.",
+    )
     return parser.parse_args(argv)
 
 
@@ -896,6 +1137,13 @@ def main(argv: list[str] | None = None) -> int:
     if not horizons:
         raise SystemExit("No valid horizons provided")
     channel_sets = list(args.channel_sets)
+    static_modes = list(dict.fromkeys(args.static_modes))
+    if "static" in static_modes and data.X_static_train is None:
+        raise SystemExit(
+            "Requested static mode but dataset has no X_static_* arrays. "
+            "Use the late-fusion NPZ generated by the notebook addendum."
+        )
+    threshold_modes = list(dict.fromkeys(args.threshold_modes))
 
     base_models = make_models(seed=args.seed, quick=args.quick)
     if args.models is not None:
@@ -910,6 +1158,11 @@ def main(argv: list[str] | None = None) -> int:
         "horizons": horizons,
         "channel_sets": channel_sets,
         "models": list(base_models),
+        "static_modes": static_modes,
+        "threshold_modes": threshold_modes,
+        "min_sensitivity": args.min_sensitivity,
+        "min_specificity": args.min_specificity,
+        "fixed_threshold": args.fixed_threshold,
         "seed": args.seed,
         "quick": args.quick,
         "dataset_summary": summary,
@@ -917,17 +1170,23 @@ def main(argv: list[str] | None = None) -> int:
     (out_dir / "run_config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
     results: list[ExperimentResult] = []
-    total = len(horizons) * len(channel_sets) * len(base_models)
+    total = len(horizons) * len(channel_sets) * len(static_modes) * len(base_models)
     counter = 0
 
     logger.info("=" * 78)
     logger.info(
-        "Plan: %d experiments = %d horizon(s) x %d channel set(s) x %d model(s)",
-        total, len(horizons), len(channel_sets), len(base_models),
+        "Plan: %d training runs = %d horizon(s) x %d channel set(s) x %d static mode(s) x %d model(s)",
+        total, len(horizons), len(channel_sets), len(static_modes), len(base_models),
     )
-    logger.info("Horizons      : %s", horizons)
-    logger.info("Channel sets  : %s", channel_sets)
-    logger.info("Models        : %s", list(base_models))
+    logger.info(
+        "      %d result rows = training runs x %d threshold mode(s)",
+        total * len(threshold_modes), len(threshold_modes),
+    )
+    logger.info("Horizons        : %s", horizons)
+    logger.info("Channel sets    : %s", channel_sets)
+    logger.info("Static modes    : %s", static_modes)
+    logger.info("Threshold modes : %s", threshold_modes)
+    logger.info("Models          : %s", list(base_models))
     logger.info("=" * 78)
 
     run_started = time.time()
@@ -943,83 +1202,98 @@ def main(argv: list[str] | None = None) -> int:
     try:
         for horizon in horizons:
             for channel_set in channel_sets:
-                for model_name in base_models:
-                    counter += 1
-                    model = make_models(seed=args.seed, quick=args.quick)[model_name]
+                for static_mode in static_modes:
+                    for model_name in base_models:
+                        counter += 1
+                        model = make_models(seed=args.seed, quick=args.quick)[model_name]
 
-                    elapsed_so_far = time.time() - run_started
-                    avg_so_far = elapsed_so_far / max(counter - 1, 1)
-                    eta_pre = avg_so_far * (total - counter + 1) if counter > 1 else 0.0
-                    logger.info(
-                        "[%d/%d] horizon=%dh | channels=%s | model=%s | elapsed=%s | eta=%s",
-                        counter, total, horizon, channel_set, model_name,
-                        format_duration(elapsed_so_far),
-                        format_duration(eta_pre) if counter > 1 else "??:??",
-                    )
-                    try:
-                        result = run_single_experiment(
-                            data=data,
-                            horizon=horizon,
-                            channel_set=channel_set,
-                            model_name=model_name,
-                            model=model,
-                            out_dir=out_dir,
-                            save_predictions=not args.no_predictions,
+                        elapsed_so_far = time.time() - run_started
+                        avg_so_far = elapsed_so_far / max(counter - 1, 1)
+                        eta_pre = avg_so_far * (total - counter + 1) if counter > 1 else 0.0
+                        logger.info(
+                            "[%d/%d] horizon=%dh | channels=%s | static=%s | model=%s | elapsed=%s | eta=%s",
+                            counter, total, horizon, channel_set, static_mode, model_name,
+                            format_duration(elapsed_so_far),
+                            format_duration(eta_pre) if counter > 1 else "??:??",
                         )
-                    except Exception as exc:
-                        logger.exception("Experiment failed: %s", exc)
+                        try:
+                            exp_results = run_single_experiment(
+                                data=data,
+                                horizon=horizon,
+                                channel_set=channel_set,
+                                static_mode=static_mode,
+                                model_name=model_name,
+                                model=model,
+                                out_dir=out_dir,
+                                threshold_modes=threshold_modes,
+                                min_sensitivity=args.min_sensitivity,
+                                min_specificity=args.min_specificity,
+                                fixed_threshold=args.fixed_threshold,
+                                save_predictions=not args.no_predictions,
+                            )
+                        except Exception as exc:
+                            logger.exception("Experiment failed: %s", exc)
+                            pbar.update(1)
+                            continue
+
+                        elapsed = time.time() - run_started
+                        avg_per_exp = elapsed / counter
+                        eta = avg_per_exp * (total - counter)
+
+                        first = exp_results[0] if exp_results else None
+                        if first:
+                            logger.info(
+                                "  timings  | feat=%.2fs fit=%.2fs predict=%.2fs total=%.2fs",
+                                first.feature_seconds, first.train_seconds,
+                                first.predict_seconds, first.total_seconds,
+                            )
+                        for res in exp_results:
+                            fallback_tag = " [FALLBACK]" if res.threshold_fallback else ""
+                            logger.info(
+                                "  [%s] test | AUROC=%.4f AUPRC=%.4f F1=%.4f sens=%.4f spec=%.4f bal_acc=%.4f thr=%.3f%s",
+                                res.threshold_mode,
+                                res.test_metrics["auroc"],
+                                res.test_metrics["auprc"],
+                                res.test_metrics["f1"],
+                                res.test_metrics["recall_sensitivity"],
+                                res.test_metrics["specificity"],
+                                res.test_metrics["balanced_accuracy"],
+                                res.val_threshold,
+                                fallback_tag,
+                            )
+                            logger.info(
+                                "  [%s] val  | AUROC=%.4f AUPRC=%.4f F1=%.4f sens=%.4f spec=%.4f",
+                                res.threshold_mode,
+                                res.val_metrics["auroc"],
+                                res.val_metrics["auprc"],
+                                res.val_metrics["f1"],
+                                res.val_metrics["recall_sensitivity"],
+                                res.val_metrics["specificity"],
+                            )
+                        logger.info(
+                            "  progress | done=%d/%d | elapsed=%s | avg/exp=%.1fs | eta=%s",
+                            counter, total,
+                            format_duration(elapsed),
+                            avg_per_exp,
+                            format_duration(eta),
+                        )
+                        results.extend(exp_results)
+
+                        best_auprc = max(r.test_metrics["auprc"] for r in results)
+                        ref = first if first else exp_results[0] if exp_results else None
+                        pbar.set_postfix(
+                            {
+                                "h": f"{horizon}",
+                                "ch": channel_set,
+                                "sm": static_mode,
+                                "model": model_name[:14],
+                                "auprc": f"{ref.test_metrics['auprc']:.3f}" if ref else "n/a",
+                                "best": f"{best_auprc:.3f}",
+                                "eta": format_duration(eta),
+                            },
+                            refresh=False,
+                        )
                         pbar.update(1)
-                        continue
-
-                    elapsed = time.time() - run_started
-                    avg_per_exp = elapsed / counter
-                    eta = avg_per_exp * (total - counter)
-
-                    logger.info(
-                        "  timings  | feat=%.2fs fit=%.2fs predict=%.2fs total=%.2fs",
-                        result.feature_seconds, result.train_seconds,
-                        result.predict_seconds, result.total_seconds,
-                    )
-                    logger.info(
-                        "  test     | AUROC=%.4f AUPRC=%.4f F1=%.4f sens=%.4f spec=%.4f bal_acc=%.4f thr=%.3f",
-                        result.test_metrics["auroc"],
-                        result.test_metrics["auprc"],
-                        result.test_metrics["f1"],
-                        result.test_metrics["recall_sensitivity"],
-                        result.test_metrics["specificity"],
-                        result.test_metrics["balanced_accuracy"],
-                        result.val_threshold,
-                    )
-                    logger.info(
-                        "  val      | AUROC=%.4f AUPRC=%.4f F1=%.4f sens=%.4f spec=%.4f",
-                        result.val_metrics["auroc"],
-                        result.val_metrics["auprc"],
-                        result.val_metrics["f1"],
-                        result.val_metrics["recall_sensitivity"],
-                        result.val_metrics["specificity"],
-                    )
-                    logger.info(
-                        "  progress | done=%d/%d | elapsed=%s | avg/exp=%.1fs | eta=%s",
-                        counter, total,
-                        format_duration(elapsed),
-                        avg_per_exp,
-                        format_duration(eta),
-                    )
-                    results.append(result)
-
-                    best_auprc = max(r.test_metrics["auprc"] for r in results)
-                    pbar.set_postfix(
-                        {
-                            "h": f"{horizon}",
-                            "ch": channel_set,
-                            "model": model_name[:18],
-                            "auprc": f"{result.test_metrics['auprc']:.3f}",
-                            "best": f"{best_auprc:.3f}",
-                            "eta": format_duration(eta),
-                        },
-                        refresh=False,
-                    )
-                    pbar.update(1)
     finally:
         pbar.close()
 
@@ -1053,9 +1327,10 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("Top 5 by test AUPRC:")
     top = df.sort_values("test_auprc", ascending=False).head(5)
     for _, row in top.iterrows():
+        thr_mode = row.get("threshold_mode", "max_f1")
         logger.info(
-            "  h=%2d | %-12s | %-22s | AUROC=%.3f AUPRC=%.3f F1=%.3f sens=%.3f spec=%.3f",
-            int(row.horizon), row.channel_set, row.model,
+            "  h=%2d | %-12s | static=%-6s | thr=%-28s | %-22s | AUROC=%.3f AUPRC=%.3f F1=%.3f sens=%.3f spec=%.3f",
+            int(row.horizon), row.channel_set, row.static_mode, thr_mode, row.model,
             row.test_auroc, row.test_auprc, row.test_f1,
             row.test_recall_sensitivity, row.test_specificity,
         )

@@ -1,0 +1,104 @@
+{
+  "data": "neonatal_sepsis_late_fusion_data_v1.npz",
+  "out_dir": "results/static_threshold_selection/cnn_bilstm",
+  "horizons": [
+    6,
+    12,
+    18,
+    24
+  ],
+  "channel_sets": [
+    "values",
+    "values_masks",
+    "full"
+  ],
+  "epochs": 100,
+  "batch_size": 64,
+  "lr": 0.001,
+  "weight_decay": 0.0001,
+  "grad_clip": 1.0,
+  "early_stop_patience": 12,
+  "use_sampler": false,
+  "use_pos_weight": true,
+  "monitor": "auprc",
+  "lstm_hidden": 96,
+  "lstm_layers": 2,
+  "conv_channels": [
+    64,
+    128
+  ],
+  "kernel_sizes": [
+    3,
+    5
+  ],
+  "dilations": [
+    1,
+    2
+  ],
+  "dropout": 0.3,
+  "head_hidden": 96,
+  "static_hidden": 32,
+  "static_dropout": 0.1,
+  "static_modes": [
+    "static"
+  ],
+  "threshold_modes": [
+    "max_f1",
+    "max_balanced_accuracy",
+    "sensitivity_at_specificity",
+    "specificity_at_sensitivity"
+  ],
+  "min_sensitivity": 0.9,
+  "min_specificity": 0.7,
+  "fixed_threshold": 0.5,
+  "seed": 42,
+  "device": "auto",
+  "dataset_summary": {
+    "channel_names": [
+      "heart_rate",
+      "temperature",
+      "respiratory_rate",
+      "fio2",
+      "sa02",
+      "heart_rate_observed_mask",
+      "temperature_observed_mask",
+      "respiratory_rate_observed_mask",
+      "fio2_observed_mask",
+      "sa02_observed_mask",
+      "source_temp_c",
+      "source_temp_axillary_f",
+      "source_temp_rectal_f",
+      "source_fio2",
+      "source_fio2_imputed",
+      "source_heart_rate",
+      "source_respiratory_rate",
+      "source_sa02"
+    ],
+    "label_names": [
+      "control",
+      "sepsis"
+    ],
+    "splits": {
+      "train": 2205,
+      "val": 276,
+      "test": 276
+    },
+    "label_balance": {
+      "train": [
+        846,
+        1359
+      ],
+      "val": [
+        106,
+        170
+      ],
+      "test": [
+        106,
+        170
+      ]
+    },
+    "horizon_max": 24,
+    "has_static_features": true,
+    "n_static_features": 9
+  }
+}
